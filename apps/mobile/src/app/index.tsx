@@ -21,7 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { pendingCount, punchesSince, type LocalPunch } from '@/lib/db';
 import { recordPunch, syncPending } from '@/lib/punchQueue';
-import { formatClock, formatDate, formatPunchTime, manilaDayStartUtcIso } from '@/lib/time';
+import { formatClock, formatDate, formatPunchTime, recentWindowStartIso } from '@/lib/time';
 import { useAuth } from '@/lib/auth';
 
 const STATUS_TEXT = {
@@ -47,7 +47,9 @@ export default function HomeScreen() {
   const online = useRef(true);
 
   const refresh = useCallback(() => {
-    setPunches(punchesSince(manilaDayStartUtcIso()));
+    // Rolling window (not the calendar day) so an overnight shift keeps its
+    // clocked-in state across midnight.
+    setPunches(punchesSince(recentWindowStartIso()));
     setPending(pendingCount());
   }, []);
 
@@ -214,9 +216,9 @@ export default function HomeScreen() {
               </Pressable>
             )}
 
-            <Text style={styles.sectionTitle}>Today</Text>
+            <Text style={styles.sectionTitle}>Recent punches</Text>
             {punches.length === 0 && (
-              <Text style={[styles.muted, { marginTop: 6 }]}>No punches yet today.</Text>
+              <Text style={[styles.muted, { marginTop: 6 }]}>No recent punches.</Text>
             )}
           </>
         }

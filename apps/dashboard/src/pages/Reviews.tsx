@@ -1,6 +1,7 @@
 import {
   PUNCH_LABELS,
   REVIEWER_ROLES,
+  punchWindowForWorkDate,
   type AttendanceStatus,
   type PunchSource,
   type PunchType,
@@ -24,7 +25,7 @@ interface RecordRow {
   flags: string[];
   corrections: Record<string, number> | null;
   employee: { id: string; full_name: string; employee_code: string } | null;
-  branch: { name: string } | null;
+  branch: { name: string; shift_start: string; shift_end: string } | null;
   reviewer: { full_name: string } | null;
 }
 
@@ -86,15 +87,28 @@ const timeFmt = new Intl.DateTimeFormat('en-PH', {
   hour12: true,
 });
 
+// Manila calendar date of a timestamp, for the "+1" hint on overnight punches.
+const manilaDateFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Manila',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
 function DayDetail({ record }: { record: RecordRow }) {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [selfies, setSelfies] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!record.employee) return;
-    // The Manila work day in UTC.
-    const start = new Date(`${record.work_date}T00:00:00+08:00`).toISOString();
-    const end = new Date(new Date(start).getTime() + 24 * 3600 * 1000).toISOString();
+    // The branch's work-day window in UTC (follows the shift cutoff, so
+    // overnight shifts include their post-midnight punches).
+    const { startIso: start, endIso: end } = record.branch
+      ? punchWindowForWorkDate(record.work_date, record.branch.shift_start, record.branch.shift_end)
+      : {
+          startIso: new Date(`${record.work_date}T00:00:00+08:00`).toISOString(),
+          endIso: new Date(new Date(`${record.work_date}T00:00:00+08:00`).getTime() + 24 * 3600 * 1000).toISOString(),
+        };
     supabase
       .from('attendance_events')
       .select('id, type, source, happened_at, received_at, inside_geofence, distance_from_branch_m, selfie_path')
@@ -137,7 +151,13 @@ function DayDetail({ record }: { record: RecordRow }) {
             </div>
           )}
           <p className="mt-2 text-xs font-semibold text-gray-900">{PUNCH_LABELS[e.type]}</p>
-          <p className="text-xs text-gray-500">{timeFmt.format(new Date(e.happened_at))} · {e.source}</p>
+          <p className="text-xs text-gray-500">
+            {timeFmt.format(new Date(e.happened_at))}
+            {manilaDateFmt.format(new Date(e.happened_at)) !== record.work_date && (
+              <span className="font-semibold text-indigo-600"> +1</span>
+            )}
+            {' · '}{e.source}
+          </p>
           <p className="text-xs">
             {e.inside_geofence === null ? (
               <span className="text-gray-400">No GPS</span>
@@ -226,7 +246,7 @@ export function Reviews() {
     let q = supabase
       .from('attendance_records')
       .select(
-        'id, work_date, status, review_note, reviewed_at, worked_minutes, break_minutes, late_minutes, undertime_minutes, overtime_minutes, day_class, flags, corrections, employee:profiles!attendance_records_employee_id_fkey(id, full_name, employee_code), branch:branches(name), reviewer:profiles!attendance_records_reviewed_by_fkey(full_name)',
+        'id, work_date, status, review_note, reviewed_at, worked_minutes, break_minutes, late_minutes, undertime_minutes, overtime_minutes, day_class, flags, corrections, employee:profiles!attendance_records_employee_id_fkey(id, full_name, employee_code), branch:branches(name, shift_start, shift_end), reviewer:profiles!attendance_records_reviewed_by_fkey(full_name)',
       )
       .order('work_date', { ascending: false })
       .limit(100);

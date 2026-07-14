@@ -9,6 +9,15 @@ export function manilaDayStartUtcIso(): string {
   return new Date(dayStartManila - MANILA_OFFSET_MS).toISOString();
 }
 
+/**
+ * Rolling window for the clock state: overnight shifts cross Manila midnight,
+ * so "am I clocked in?" derives from the last punch within this window rather
+ * than the calendar day. 18 h also ages out a forgotten clock-out by morning.
+ */
+export function recentWindowStartIso(hours = 18): string {
+  return new Date(Date.now() - hours * 3_600_000).toISOString();
+}
+
 const timeFmt = new Intl.DateTimeFormat('en-PH', {
   timeZone: DEFAULT_TIMEZONE,
   hour: '2-digit',
@@ -32,6 +41,17 @@ const shortTimeFmt = new Intl.DateTimeFormat('en-PH', {
   hour12: true,
 });
 
+const manilaYmdFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: DEFAULT_TIMEZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
 export const formatClock = (d: Date) => timeFmt.format(d);
 export const formatDate = (d: Date) => dateFmt.format(d);
-export const formatPunchTime = (iso: string) => shortTimeFmt.format(new Date(iso));
+export const formatPunchTime = (iso: string) => {
+  const d = new Date(iso);
+  const prefix = manilaYmdFmt.format(d) !== manilaYmdFmt.format(new Date()) ? 'Yesterday ' : '';
+  return prefix + shortTimeFmt.format(d);
+};

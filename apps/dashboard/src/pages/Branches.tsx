@@ -1,4 +1,10 @@
-import { DEFAULT_GEOFENCE_RADIUS_M, DEFAULT_TIMEZONE, type Branch } from '@fermosa/shared';
+import {
+  DEFAULT_GEOFENCE_RADIUS_M,
+  DEFAULT_TIMEZONE,
+  formatShift,
+  isOvernight,
+  type Branch,
+} from '@fermosa/shared';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
@@ -29,6 +35,9 @@ export function Branches() {
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [recompute, setRecompute] = useState<{ branch: Branch; from: string; to: string } | null>(null);
+  const [recomputeMsg, setRecomputeMsg] = useState<string | null>(null);
+  const [recomputeBusy, setRecomputeBusy] = useState(false);
 
   const reload = useCallback(() => {
     supabase.from('branches').select('*').order('name')
@@ -69,6 +78,34 @@ export function Branches() {
     }));
   };
 
+  const startRecompute = (b: Branch) => {
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const today = new Date();
+    setRecompute({
+      branch: b,
+      from: iso(new Date(today.getTime() - 30 * 86_400_000)),
+      to: iso(today),
+    });
+    setRecomputeMsg(null);
+  };
+
+  const runRecompute = async () => {
+    if (!recompute) return;
+    setRecomputeBusy(true);
+    setRecomputeMsg(null);
+    const { data, error: err } = await supabase.rpc('recompute_branch_attendance', {
+      p_branch_id: recompute.branch.id,
+      p_from: recompute.from,
+      p_to: recompute.to,
+    });
+    setRecomputeBusy(false);
+    setRecomputeMsg(
+      err
+        ? `Error: ${err.message}`
+        : `Recomputed ${data} pending day(s) for ${recompute.branch.name}.`,
+    );
+  };
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -87,6 +124,11 @@ export function Branches() {
     };
     if (form.work_days.length === 0) {
       setError('Select at least one working day.');
+      setBusy(false);
+      return;
+    }
+    if (form.shift_start === form.shift_end) {
+      setError('Shift start and end cannot be the same. For an overnight shift, set an end time earlier than the start (e.g. 22:00 → 06:00).');
       setBusy(false);
       return;
     }
@@ -164,6 +206,11 @@ export function Branches() {
             <div>
               <label className={labelClass}>Shift end</label>
               <input type="time" value={form.shift_end} onChange={(e) => setForm({ ...form, shift_end: e.target.value })} className={inputClass} />
+              {form.shift_start !== form.shift_end && isOvernight(form.shift_start, form.shift_end) && (
+                <p className="mt-1 text-xs font-medium text-indigo-600">
+                  Ends the next day (+1) — overnight shift. Late/overtime and the work day follow the day the shift starts.
+                </p>
+              )}
             </div>
           </div>
 
@@ -220,6 +267,46 @@ export function Branches() {
         </form>
       )}
 
+      {recompute && (
+        <div className="mt-4 rounded-xl border border-gray-200 bg-white p-6">
+          <h3 className="text-sm font-semibold text-gray-900">
+            Recompute pending days — {recompute.branch.name}
+          </h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Re-runs the attendance engine after a schedule change. Only days still pending review
+            are recomputed; approved and corrected days are never touched.
+          </p>
+          <div className="mt-3 flex items-end gap-3">
+            <div>
+              <label className={labelClass}>From</label>
+              <input type="date" value={recompute.from} onChange={(e) => setRecompute({ ...recompute, from: e.target.value })} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>To</label>
+              <input type="date" value={recompute.to} onChange={(e) => setRecompute({ ...recompute, to: e.target.value })} className={inputClass} />
+            </div>
+            <button
+              onClick={runRecompute}
+              disabled={recomputeBusy}
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            >
+              {recomputeBusy ? 'Recomputing…' : 'Recompute'}
+            </button>
+            <button
+              onClick={() => setRecompute(null)}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            >
+              Close
+            </button>
+          </div>
+          {recomputeMsg && (
+            <p className={`mt-3 text-sm ${recomputeMsg.startsWith('Error') ? 'text-red-600' : 'text-green-700'}`}>
+              {recomputeMsg}
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-left text-sm">
           <thead className="bg-gray-50 text-gray-600">
@@ -242,7 +329,7 @@ export function Branches() {
                   {b.lat.toFixed(4)}, {b.lng.toFixed(4)}
                 </td>
                 <td className="px-4 py-2 text-xs text-gray-600">
-                  {b.shift_start.slice(0, 5)}–{b.shift_end.slice(0, 5)} ·{' '}
+                  {formatShift(b.shift_start, b.shift_end)} ·{' '}
                   {(b.work_days ?? []).map((d) => DAY_LABELS[d - 1]).join(' ')}
                 </td>
                 <td className="px-4 py-2 text-gray-600">{b.geofence_radius_m} m</td>
@@ -260,6 +347,9 @@ export function Branches() {
                 <td className="px-4 py-2 text-right">
                   <button onClick={() => startEdit(b)} className="text-sm text-brand-700 hover:underline">
                     Edit
+                  </button>
+                  <button onClick={() => startRecompute(b)} className="ml-3 text-sm text-gray-500 hover:underline">
+                    Recompute
                   </button>
                 </td>
               </tr>
