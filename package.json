@@ -1,0 +1,23 @@
+{
+  "name": "fermosa-attendance",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Fermosa Skin Care Clinic attendance system — mobile clock-in with GPS + selfie verification, HR approvals, and payroll export",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dashboard": "npm run dev --workspace apps/dashboard",
+    "mobile": "npm run start --workspace apps/mobile",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:start": "npx supabase start",
+    "db:stop": "npx supabase stop",
+    "db:reset": "npx supabase db reset",
+    "db:migrate": "npx supabase migration up"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

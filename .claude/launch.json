@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": [
+        "/c",
+        "set PATH=C:\\Users\\mai\\AppData\\Local\\Programs\\nodejs;%PATH% && npm run dashboard"
+      ],
+      "port": 5173
+    }
+  ]
+}

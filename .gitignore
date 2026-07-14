@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+.expo/
+web-build/
+
+# Environment / secrets — never commit
+.env
+.env.*
+!.env.example
+**/google-service-account*.json
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
