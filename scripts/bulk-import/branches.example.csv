@@ -1,0 +1,4 @@
+name,address,lat,lng,geofence_radius_m,shift_start,shift_end,work_days
+Fermosa Trece Martires,"City Hall Rd, Trece Martires, Cavite",14.28200,120.86500,120,10:00,19:00,1 2 3 4 5 6
+Fermosa Indang,"Poblacion, Indang, Cavite",14.19300,120.87700,100,10:00,21:00,1 2 3 4 5 6
+Fermosa Bacoor,"Aguinaldo Hwy, Bacoor, Cavite",14.45900,120.94500,100,10:00,19:00,1 2 3 4 5 7

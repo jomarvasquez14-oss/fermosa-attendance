@@ -18,6 +18,12 @@ web-build/
 supabase/.branches/
 supabase/.temp/
 
+# Bulk import — filled sheets + generated logins hold real staff data
+scripts/bulk-import/branches.csv
+scripts/bulk-import/employees.csv
+scripts/bulk-import/holidays.csv
+scripts/bulk-import/credentials.csv
+
 # Editor / OS
 .vscode/
 .idea/

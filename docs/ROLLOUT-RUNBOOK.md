@@ -73,16 +73,31 @@ super_admin login. The cleanest path is the dashboard once it's deployed
 
 ## 3. Configure Edge Function secrets + deploy
 
-The three functions (`admin-users`, `kiosk-punch`, `payroll-sync`) deploy to the
-prod project. `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
-`SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
+The four functions (`admin-users`, `kiosk-punch`, `payroll-sync`,
+`purge-selfies`) deploy to the prod project. `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
 
 ```bash
 export SUPABASE_ACCESS_TOKEN=<your token from supabase.com → Account → Access Tokens>
-npx supabase@latest functions deploy admin-users  --project-ref <PROD_REF>
-npx supabase@latest functions deploy kiosk-punch   --project-ref <PROD_REF>
-npx supabase@latest functions deploy payroll-sync  --project-ref <PROD_REF>
+npx supabase@latest functions deploy admin-users   --project-ref <PROD_REF>
+npx supabase@latest functions deploy kiosk-punch    --project-ref <PROD_REF>
+npx supabase@latest functions deploy payroll-sync   --project-ref <PROD_REF>
+npx supabase@latest functions deploy purge-selfies  --project-ref <PROD_REF>
 ```
+
+**Selfie retention (30-day auto-delete).** The `selfie_retention` migration
+schedules a daily pg_cron job that calls `purge-selfies`. Wire its secret (once):
+
+```bash
+supabase secrets set PURGE_SECRET=<random-strong-secret> --project-ref <PROD_REF>
+```
+then in the SQL editor set the Vault entries the cron reads (URL + same secret):
+```sql
+select vault.create_secret('https://<PROD_REF>.supabase.co/functions/v1/purge-selfies', 'purge_selfies_url');
+select vault.create_secret('<same-random-strong-secret>', 'purge_selfies_secret');
+```
+Until these are set the job no-ops safely. Selfies are already compressed to
+~40–80 KB on capture; with 30-day purge, storage stays ≈ 360 MB for 100 staff.
 
 For payroll → Sheets, set the Google secrets per
 [SETUP-GOOGLE-SHEETS.md](SETUP-GOOGLE-SHEETS.md) (otherwise payroll-sync stays in
@@ -93,19 +108,28 @@ returns `{"ok":false,"error":"not authenticated"}` (alive, not 404).
 
 ---
 
-## 4. Deploy the dashboard
+## 4. Deploy the dashboard (Vercel)
 
-1. Create `apps/dashboard/.env.production` (or set host env vars):
+`vercel.json` (repo root) already sets the monorepo build (install at root, build
+the dashboard workspace → `apps/dashboard/dist`) and the SPA rewrite, so the
+build needs no manual config.
+
+1. At <https://vercel.com> → Add New → Project → import the GitHub repo
+   (`jomarvasquez14-oss/fermosa-attendance`). Leave **Root Directory = repo root**
+   (vercel.json drives the build); Framework preset = Other.
+2. Project → Settings → Environment Variables → add for **Production**:
    ```
    VITE_SUPABASE_URL=https://<PROD_REF>.supabase.co
    VITE_SUPABASE_ANON_KEY=<prod anon key>
    ```
-2. Build: `npm run build -w apps/dashboard` → static output in `apps/dashboard/dist`.
-3. Deploy `dist/` to Vercel / Netlify / Cloudflare Pages. Because it's a SPA,
-   add a catch-all rewrite to `/index.html` (Vercel: `rewrites` to `/`; Netlify:
-   `/* /index.html 200`).
+   (The anon key is safe to expose — RLS protects the data; the DB password and
+   service-role key are never used here.)
+3. Deploy. Every push to `main` auto-deploys (pairs with the post-commit
+   auto-push). You get an HTTPS URL like `https://fermosa-attendance.vercel.app`
+   — HTTPS is required for the camera/GPS on web clock-in.
 
-**Check:** open the deployed URL, sign in as the owner, all pages load.
+**Check:** open the deployed URL, sign in as the owner, all pages load; on a
+phone the camera starts on clock-in.
 
 ---
 
