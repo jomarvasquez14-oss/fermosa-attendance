@@ -40,6 +40,9 @@ export function Layout() {
               <NavLink to="/reviews" className={linkClass}>
                 Reviews
               </NavLink>
+              <NavLink to="/leave" className={linkClass}>
+                Leave
+              </NavLink>
             </>
           )}
           {isAdmin && (

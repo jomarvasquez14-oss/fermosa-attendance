@@ -22,7 +22,46 @@ export type AttendanceStatus = 'pending_review' | 'approved' | 'rejected' | 'cor
 /** Informational flags computed by the attendance engine, independent of approval status. */
 export type AttendanceFlag = 'on_time' | 'late' | 'early_out' | 'no_clock_out' | 'overtime';
 
-export type LeaveStatus = 'pending_manager' | 'pending_hr' | 'approved' | 'rejected' | 'cancelled';
+/** Single-step approval (product decision 2026-07-15): HR+ approve directly. */
+export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface LeaveType {
+  id: string;
+  company_id: string;
+  name: string;
+  is_paid: boolean;
+  default_days_per_year: number;
+  is_active: boolean;
+}
+
+export interface LeaveRequest {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  leave_type_id: string;
+  start_date: string; // 'YYYY-MM-DD'
+  end_date: string;
+  half_day: boolean;
+  day_count: number; // working days in range (server-computed); 0.5 for half-day
+  reason: string | null;
+  status: LeaveStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_at: string;
+}
+
+/** A row of public.leave_balances_view — entitlement plus computed usage. */
+export interface LeaveBalance {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  leave_type_id: string;
+  year: number;
+  entitled_days: number;
+  used_days: number;
+  remaining_days: number;
+}
 
 export interface Company {
   id: string;
@@ -49,7 +88,14 @@ export interface Branch {
 export type DayClass = 'regular' | 'rest_day' | 'regular_holiday' | 'special_holiday';
 
 /** Engine flags on a daily record — separate from approval status. */
-export type RecordFlag = 'on_time' | 'late' | 'early_out' | 'no_clock_out' | 'overtime' | 'absent';
+export type RecordFlag =
+  | 'on_time'
+  | 'late'
+  | 'early_out'
+  | 'no_clock_out'
+  | 'overtime'
+  | 'absent'
+  | 'on_leave';
 
 export interface Profile {
   id: string; // = auth.users.id

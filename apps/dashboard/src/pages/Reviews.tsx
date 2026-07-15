@@ -36,6 +36,7 @@ const FLAG_BADGE: Record<string, string> = {
   overtime: 'bg-sky-100 text-sky-700',
   no_clock_out: 'bg-red-100 text-red-700',
   absent: 'bg-red-100 text-red-700',
+  on_leave: 'bg-green-100 text-green-700',
 };
 
 const DAY_CLASS_LABEL: Record<string, string> = {

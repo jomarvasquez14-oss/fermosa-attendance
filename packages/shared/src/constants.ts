@@ -1,4 +1,4 @@
-import type { PunchType, Role } from './types';
+import type { LeaveStatus, PunchType, Role } from './types';
 
 export const DEFAULT_TIMEZONE = 'Asia/Manila';
 
@@ -19,6 +19,13 @@ export const COMPANY_WIDE_ROLES: Role[] = ['hr', 'operations_manager', 'super_ad
 
 /** Punch uploads whose device-vs-server time gap exceeds this are flagged for HR review. */
 export const CLOCK_DRIFT_FLAG_THRESHOLD_MIN = 24 * 60; // offline punches can legitimately sync a day late
+
+export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = {
+  pending: 'Pending',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
+};
 
 export const ROLE_LABELS: Record<Role, string> = {
   employee: 'Employee',

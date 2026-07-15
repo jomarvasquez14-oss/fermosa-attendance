@@ -210,6 +210,10 @@ export default function HomeScreen() {
               </Pressable>
             </View>
 
+            <Pressable style={styles.leaveLink} onPress={() => router.push('/leave')}>
+              <Text style={styles.leaveLinkText}>🏖️  Leave &amp; balances →</Text>
+            </Pressable>
+
             {COMPANY_WIDE_ROLES.includes(profile.role) && (
               <Pressable onPress={() => router.push('/kiosk-setup')}>
                 <Text style={styles.kioskLink}>Set up this device as a branch kiosk →</Text>
@@ -301,6 +305,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   syncNow: { fontSize: 13, fontWeight: '600', color: '#d64580' },
+  leaveLink: {
+    marginTop: 16,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  leaveLinkText: { fontSize: 15, fontWeight: '600', color: '#111827' },
   kioskLink: { marginTop: 10, fontSize: 13, color: '#9ca3af' },
   sectionTitle: { marginTop: 22, fontSize: 15, fontWeight: '600', color: '#111827' },
   punchRow: {
