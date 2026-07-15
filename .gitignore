@@ -6,6 +6,7 @@ dist/
 build/
 .expo/
 web-build/
+*.tsbuildinfo
 
 # Environment / secrets — never commit
 .env
