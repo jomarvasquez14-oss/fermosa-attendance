@@ -86,13 +86,17 @@ Deno.serve(async (req) => {
 
   if (body.action === 'create') {
     const input = body.input as Record<string, unknown> | undefined;
-    const email = String(input?.email ?? '').trim().toLowerCase();
+    // The `email` field carries a plain username (no @) or a real email; map it
+    // to the email Supabase Auth stores. Keep in sync with usernameToEmail() in
+    // packages/shared/src/username.ts.
+    const rawId = String(input?.email ?? '').trim().toLowerCase();
+    const email = rawId.includes('@') ? rawId : `${rawId}@fermosa.local`;
     const password = String(input?.password ?? '');
     const fullName = String(input?.full_name ?? '').trim();
     const employeeCode = String(input?.employee_code ?? '').trim();
     const role = String(input?.role ?? 'employee') as Role;
 
-    if (!email || !email.includes('@')) return json(400, { ok: false, error: 'valid email required' });
+    if (!rawId) return json(400, { ok: false, error: 'username required' });
     if (password.length < 8) return json(400, { ok: false, error: 'password must be at least 8 characters' });
     if (!fullName) return json(400, { ok: false, error: 'full_name required' });
     if (!employeeCode) return json(400, { ok: false, error: 'employee_code required' });

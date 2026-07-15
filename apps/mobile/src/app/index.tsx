@@ -214,6 +214,10 @@ export default function HomeScreen() {
               <Text style={styles.leaveLinkText}>🏖️  Leave &amp; balances →</Text>
             </Pressable>
 
+            <Pressable style={styles.leaveLink} onPress={() => router.push('/change-password')}>
+              <Text style={styles.leaveLinkText}>🔑  Change password →</Text>
+            </Pressable>
+
             {COMPANY_WIDE_ROLES.includes(profile.role) && (
               <Pressable onPress={() => router.push('/kiosk-setup')}>
                 <Text style={styles.kioskLink}>Set up this device as a branch kiosk →</Text>

@@ -188,8 +188,19 @@ export function EmployeeForm() {
         {isNew && (
           <>
             <div>
-              <label className={labelClass}>Email (their login)</label>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+              <label className={labelClass}>Username (their login)</label>
+              <input
+                type="text"
+                required
+                autoCapitalize="none"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="e.g. maria.santos"
+                className={inputClass}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                No email needed — the employee signs in with this. A real email works too.
+              </p>
             </div>
             <div>
               <label className={labelClass}>Temporary password</label>

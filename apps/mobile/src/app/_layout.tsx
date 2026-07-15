@@ -28,6 +28,7 @@ function RootNavigator() {
         <Stack.Screen name="index" />
         <Stack.Screen name="selfie" />
         <Stack.Screen name="leave" />
+        <Stack.Screen name="change-password" />
         <Stack.Screen name="kiosk-setup" />
       </Stack.Protected>
       <Stack.Protected guard={!kioskMode && !session}>

@@ -8,6 +8,13 @@ export const PAY_PERIOD_MODEL = 'semi_monthly' as const;
 export const DEFAULT_GEOFENCE_RADIUS_M = 100;
 
 /**
+ * Internal domain for username-based login. Employees sign in with a plain
+ * username; Supabase Auth (which is email-based) stores `<username>@<this>`.
+ * Never shown to users. See usernameToEmail().
+ */
+export const USERNAME_EMAIL_DOMAIN = 'fermosa.local';
+
+/**
  * Roles allowed to approve/reject/correct attendance.
  * Product decision (2026-07-14): branch managers are VIEW-ONLY on reviews;
  * approval centralizes with HR / operations / super admin.

@@ -207,7 +207,7 @@ export interface AttendanceEvent {
 
 /** Payload for the `admin-users` Edge Function: create an employee account. */
 export interface CreateEmployeeInput {
-  email: string;
+  email: string; // login identifier — a plain username or a real email; the function maps it via usernameToEmail()
   password: string; // temp password set by HR, communicated out-of-band
   full_name: string;
   employee_code: string;

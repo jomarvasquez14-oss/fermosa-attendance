@@ -5,3 +5,4 @@ export * from './punchRules';
 export * from './schedule';
 export * from './leave';
 export * from './payroll';
+export * from './username';

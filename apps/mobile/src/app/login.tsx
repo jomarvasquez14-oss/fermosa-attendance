@@ -10,10 +10,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { usernameToEmail } from '@fermosa/shared';
 import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -22,7 +23,7 @@ export default function LoginScreen() {
     setError(null);
     setSubmitting(true);
     const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email: usernameToEmail(username),
       password,
     });
     if (signInError) setError(signInError.message);
@@ -39,15 +40,15 @@ export default function LoginScreen() {
           <Text style={styles.title}>Fermosa Attendance</Text>
           <Text style={styles.subtitle}>Sign in with your employee account</Text>
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>Username</Text>
           <TextInput
             style={styles.input}
-            value={email}
-            onChangeText={setEmail}
+            value={username}
+            onChangeText={setUsername}
             autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            placeholder="you@fermosa.test"
+            autoCorrect={false}
+            autoComplete="username"
+            placeholder="username"
             placeholderTextColor="#9ca3af"
           />
 
@@ -56,9 +57,10 @@ export default function LoginScreen() {
             style={styles.input}
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
             autoComplete="current-password"
-            placeholder="••••••••"
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="password"
             placeholderTextColor="#9ca3af"
             onSubmitEditing={onSubmit}
           />
