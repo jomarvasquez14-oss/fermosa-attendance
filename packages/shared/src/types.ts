@@ -83,6 +83,26 @@ export interface LeaveBalance {
   remaining_days: number;
 }
 
+/** One row of public.report_payroll_summary — an employee's period totals. */
+export interface PayrollSummaryRow {
+  employee_id: string;
+  employee_code: string;
+  full_name: string;
+  branch_id: string;
+  branch_name: string;
+  scheduled_days: number; // days with a daily record in the period
+  days_present: number;
+  days_absent: number;
+  worked_minutes: number;
+  late_minutes: number;
+  undertime_minutes: number;
+  overtime_minutes: number;
+  paid_leave_days: number;
+  unpaid_leave_days: number;
+  rest_days_worked: number;
+  holidays_worked: number;
+}
+
 export interface Company {
   id: string;
   name: string;

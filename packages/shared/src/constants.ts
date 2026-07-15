@@ -2,6 +2,9 @@ import type { LeaveStatus, LiveStatus, PunchType, Role } from './types';
 
 export const DEFAULT_TIMEZONE = 'Asia/Manila';
 
+/** Payroll periods are semi-monthly (1–15, 16–EOM) — Philippine "kinsenas". */
+export const PAY_PERIOD_MODEL = 'semi_monthly' as const;
+
 export const DEFAULT_GEOFENCE_RADIUS_M = 100;
 
 /**

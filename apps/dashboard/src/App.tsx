@@ -10,6 +10,7 @@ import { Overview } from './pages/Overview';
 import { Punches } from './pages/Punches';
 import { Kiosks } from './pages/Kiosks';
 import { Leave } from './pages/Leave';
+import { Reports } from './pages/Reports';
 import { Reviews } from './pages/Reviews';
 import { Settings } from './pages/Settings';
 
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="/punches" element={<Punches />} />
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/leave" element={<Leave />} />
+            <Route path="/reports" element={<Reports />} />
             <Route path="/kiosks" element={<Kiosks />} />
             <Route path="/branches" element={<Branches />} />
             <Route path="/org" element={<Org />} />
