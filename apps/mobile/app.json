@@ -3,15 +3,20 @@
     "name": "Fermosa Attendance",
     "slug": "fermosa-attendance",
     "version": "0.1.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "fermosa",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "ph.fermosa.attendance"
     },
     "android": {
+      "package": "ph.fermosa.attendance",
       "adaptiveIcon": {
         "backgroundColor": "#fdf2f8",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

@@ -26,6 +26,25 @@ function json(status: number, body: Record<string, unknown>) {
   });
 }
 
+// Read the `aal` claim from the caller's already-validated JWT.
+function jwtAal(authHeader: string): string | null {
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    return (JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '='))).aal as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// If the caller has a verified 2FA factor, require a stepped-up (aal2) session.
+function mfaSatisfied(caller: { factors?: { status?: string }[] } | null, authHeader: string): boolean {
+  const hasVerified = (caller?.factors ?? []).some((f) => f.status === 'verified');
+  return !hasVerified || jwtAal(authHeader) === 'aal2';
+}
+
 const HEADERS = [
   'Employee code', 'Name', 'Branch', 'Days present', 'Days absent', 'Worked hours',
   'Late (min)', 'Undertime (min)', 'OT (min)', 'Paid leave', 'Unpaid leave',
@@ -166,6 +185,9 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (!callerProfile || !ADMIN_ROLES.includes(callerProfile.role as Role)) {
     return json(403, { ok: false, error: 'admin role required' });
+  }
+  if (!mfaSatisfied(caller, authHeader)) {
+    return json(403, { ok: false, error: '2FA required: complete two-factor sign-in before this action' });
   }
 
   let body: Record<string, unknown>;

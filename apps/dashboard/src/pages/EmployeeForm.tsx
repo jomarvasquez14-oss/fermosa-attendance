@@ -9,6 +9,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   createEmployee,
   generateTempPassword,
+  resetMfa,
   resetPassword,
   setEmployeePin,
 } from '../lib/adminApi';
@@ -154,6 +155,20 @@ export function EmployeeForm() {
       setNotice(`Password reset. Share it with the employee: ${newPassword}`);
       setNewPassword('');
     }
+  };
+
+  const onResetMfa = async () => {
+    if (
+      !window.confirm(
+        "Remove this employee's 2FA? They will sign in with just their password until they re-enroll.",
+      )
+    )
+      return;
+    setError(null);
+    setNotice(null);
+    const res = await resetMfa(id!);
+    if (!res.ok) setError(res.error ?? 'Failed to reset 2FA');
+    else setNotice('2FA reset. The employee can set it up again from Settings.');
   };
 
   if (!loaded) {
@@ -315,6 +330,23 @@ export function EmployeeForm() {
               </button>
             </div>
           </div>
+
+          {me?.role === 'super_admin' && (
+            <div className="rounded-xl border border-gray-200 bg-white p-5">
+              <h3 className="text-sm font-semibold text-gray-900">Reset 2FA</h3>
+              <p className="mt-1 text-xs text-gray-500">
+                Clear this employee’s authenticator if they lost their device. They sign in with
+                their password until they re-enroll.
+              </p>
+              <button
+                type="button"
+                onClick={onResetMfa}
+                className="mt-3 whitespace-nowrap rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              >
+                Reset 2FA
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

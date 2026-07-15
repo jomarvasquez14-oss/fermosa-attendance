@@ -37,6 +37,22 @@ export const LIVE_STATUS_LABELS: Record<LiveStatus, string> = {
   not_in: 'Not in',
 };
 
+/**
+ * Friendly labels for audit_logs.action values. Unknown actions fall back to
+ * the raw string in the UI, so this map need not be exhaustive.
+ */
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  employee_created: 'Employee created',
+  password_reset: 'Password reset',
+  pin_set: 'PIN set',
+  profile_updated: 'Profile updated',
+  attendance_reviewed: 'Attendance reviewed',
+  leave_reviewed: 'Leave reviewed',
+  mfa_enrolled: '2FA enabled',
+  mfa_disabled: '2FA disabled',
+  mfa_reset: '2FA reset (admin)',
+};
+
 export const ROLE_LABELS: Record<Role, string> = {
   employee: 'Employee',
   branch_manager: 'Branch Manager',

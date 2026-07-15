@@ -1,10 +1,12 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { AuthProvider, useAuth } from './lib/auth';
+import { MfaChallenge } from './components/MfaChallenge';
+import { AuthProvider, needsMfaChallenge, useAuth } from './lib/auth';
 import { Branches } from './pages/Branches';
 import { EmployeeForm } from './pages/EmployeeForm';
 import { Employees } from './pages/Employees';
 import { Login } from './pages/Login';
+import { Audit } from './pages/Audit';
 import { Org } from './pages/Org';
 import { Overview } from './pages/Overview';
 import { Punches } from './pages/Punches';
@@ -30,9 +32,11 @@ function LoginGate() {
 }
 
 function RequireAuth() {
-  const { session, profile, loading, signOut } = useAuth();
+  const { session, profile, aal, aalLoading, loading, signOut } = useAuth();
   if (loading) return <Loading />;
   if (!session) return <Navigate to="/login" replace />;
+  if (aalLoading) return <Loading />;
+  if (needsMfaChallenge(aal)) return <MfaChallenge />;
   if (!profile) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center text-sm text-gray-500">
@@ -67,6 +71,7 @@ export default function App() {
             <Route path="/kiosks" element={<Kiosks />} />
             <Route path="/branches" element={<Branches />} />
             <Route path="/org" element={<Org />} />
+            <Route path="/audit" element={<Audit />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

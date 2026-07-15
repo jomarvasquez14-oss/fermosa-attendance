@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { TwoFactorCard } from '../components/TwoFactorCard';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 
@@ -299,6 +300,8 @@ export function Settings() {
           </tbody>
         </table>
       </div>
+
+      <TwoFactorCard />
     </div>
   );
 }

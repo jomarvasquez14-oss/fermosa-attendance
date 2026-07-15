@@ -123,6 +123,20 @@ export interface PayrollSyncLog {
   synced_at: string;
 }
 
+/** One row of public.audit_log_view — an audit event with the actor's name/role. */
+export interface AuditLogRow {
+  id: number;
+  company_id: string;
+  actor_id: string | null;
+  actor_name: string | null;
+  actor_role: Role | null;
+  action: string;
+  table_name: string;
+  record_id: string | null;
+  details: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -207,7 +221,8 @@ export interface CreateEmployeeInput {
 
 export type AdminUsersRequest =
   | { action: 'create'; input: CreateEmployeeInput }
-  | { action: 'reset_password'; user_id: string; new_password: string };
+  | { action: 'reset_password'; user_id: string; new_password: string }
+  | { action: 'mfa_reset'; user_id: string };
 
 export interface AdminUsersResponse {
   ok: boolean;

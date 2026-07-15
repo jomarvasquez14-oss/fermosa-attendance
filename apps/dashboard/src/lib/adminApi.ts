@@ -29,6 +29,11 @@ export function resetPassword(userId: string, newPassword: string) {
   return callAdminUsers({ action: 'reset_password', user_id: userId, new_password: newPassword });
 }
 
+/** Clear a user's enrolled 2FA factors (super_admin only) — lost-device recovery. */
+export function resetMfa(userId: string) {
+  return callAdminUsers({ action: 'mfa_reset', user_id: userId });
+}
+
 export async function setEmployeePin(employeeId: string, pin: string) {
   const { error } = await supabase.rpc('set_employee_pin', {
     p_employee_id: employeeId,

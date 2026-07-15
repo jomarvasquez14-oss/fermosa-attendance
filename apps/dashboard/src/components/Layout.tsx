@@ -59,6 +59,9 @@ export function Layout() {
               <NavLink to="/org" className={linkClass}>
                 Departments &amp; Positions
               </NavLink>
+              <NavLink to="/audit" className={linkClass}>
+                Audit log
+              </NavLink>
               <NavLink to="/settings" className={linkClass}>
                 Settings
               </NavLink>
