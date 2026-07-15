@@ -7,6 +7,7 @@ import {
   type PunchType,
 } from '@fermosa/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
 import { WebcamCapture } from '../components/WebcamCapture';
 import { useAuth } from '../lib/auth';
@@ -185,6 +186,15 @@ export function TimeClock() {
 
       {note && <p className="mt-4 rounded-xl bg-ground px-4 py-3 text-sm text-ink">{note}</p>}
       {error && <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
+
+      <div className="mt-6 flex flex-wrap gap-2">
+        <Link to="/my/leave" className="btn">
+          Leave &amp; balances
+        </Link>
+        <Link to="/my/password" className="btn">
+          Change password
+        </Link>
+      </div>
 
       <h3 className="mt-8 text-sm font-semibold uppercase tracking-wide text-muted">Recent punches</h3>
       <div className="mt-2 space-y-2">

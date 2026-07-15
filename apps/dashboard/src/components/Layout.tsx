@@ -2,6 +2,7 @@ import { COMPANY_WIDE_ROLES, ROLE_LABELS } from '@fermosa/shared';
 import {
   BarChart3,
   Building2,
+  CalendarCheck,
   CalendarDays,
   ClipboardCheck,
   Clock,
@@ -30,7 +31,8 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { to: '/my', label: 'My time clock', icon: Fingerprint, access: 'all' },
+  { to: '/my', end: true, label: 'My time clock', icon: Fingerprint, access: 'all' },
+  { to: '/my/leave', label: 'My leave', icon: CalendarCheck, access: 'all' },
   { to: '/', end: true, label: 'Dashboard', icon: LayoutDashboard, access: 'manager' },
   { to: '/employees', label: 'Employees', icon: Users, access: 'manager' },
   { to: '/punches', label: 'Punches', icon: Clock, access: 'manager' },

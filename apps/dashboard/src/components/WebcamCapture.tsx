@@ -2,16 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface Props {
   title: string;
-  /** base64 jpeg (no data: prefix), or null when the user proceeds without a camera. */
-  onCapture: (selfieB64: string | null) => void;
+  /** base64 jpeg (no data: prefix). A selfie is required — the punch is blocked without one. */
+  onCapture: (selfieB64: string) => void;
   onCancel: () => void;
 }
 
 /**
- * Front-camera selfie in the browser. By product decision a punch must NEVER
- * be blocked by the camera: permission denied, no device, or an insecure
- * context (plain-HTTP LAN) offers a "continue without selfie" path — the punch
- * gets flagged for HR instead. Mirrors the mobile SelfieCamera behaviour.
+ * Front-camera selfie in the browser, REQUIRED for a web clock in/out — every
+ * branch tablet and staff laptop has a camera, so the photo is mandatory proof.
+ * If the camera can't start (permission denied, no device, or an insecure
+ * http:// context) the punch is BLOCKED with guidance rather than recorded
+ * without a photo. Breaks don't use this component (they stay one-tap).
  */
 export function WebcamCapture({ title, onCapture, onCancel }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -19,6 +20,7 @@ export function WebcamCapture({ title, onCapture, onCancel }: Props) {
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -27,6 +29,8 @@ export function WebcamCapture({ title, onCapture, onCancel }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    setFailed(false);
+    setReady(false);
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       setFailed(true);
       return;
@@ -50,7 +54,7 @@ export function WebcamCapture({ title, onCapture, onCancel }: Props) {
       cancelled = true;
       stop();
     };
-  }, [stop]);
+  }, [attempt, stop]);
 
   const capture = () => {
     if (busy) return;
@@ -73,14 +77,19 @@ export function WebcamCapture({ title, onCapture, onCancel }: Props) {
       return;
     }
     ctx.drawImage(video, 0, 0, w, h);
-    const b64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1] ?? null;
+    const b64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+    if (!b64) {
+      setFailed(true);
+      setBusy(false);
+      return;
+    }
     stop();
     onCapture(b64);
   };
 
-  const skip = () => {
-    stop();
-    onCapture(null);
+  const retry = () => {
+    setBusy(false);
+    setAttempt((a) => a + 1);
   };
   const cancel = () => {
     stop();
@@ -93,12 +102,13 @@ export function WebcamCapture({ title, onCapture, onCancel }: Props) {
 
       {failed ? (
         <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center">
-          <p className="text-sm text-muted">
-            The camera is unavailable. You can continue — the punch will be marked “no selfie” and
-            HR will review it.
+          <p className="text-sm font-semibold text-ink">A selfie is required to clock in</p>
+          <p className="mt-2 text-sm text-muted">
+            Use a device with a working camera and allow camera access. On a computer or tablet the
+            page must be opened over a secure (https) address.
           </p>
-          <button onClick={skip} className="btn-primary mt-4 w-full">
-            Continue without selfie
+          <button onClick={retry} className="btn-primary mt-4 w-full">
+            Try again
           </button>
           <button onClick={cancel} className="btn mt-2 w-full">
             Cancel
@@ -118,12 +128,12 @@ export function WebcamCapture({ title, onCapture, onCancel }: Props) {
               disabled={!ready || busy}
               className="btn-primary w-full disabled:opacity-50"
             >
-              {busy ? 'Capturing…' : 'Take selfie'}
+              {busy ? 'Capturing…' : ready ? 'Take selfie' : 'Starting camera…'}
             </button>
-            <button onClick={skip} className="btn w-full">
-              Continue without selfie
-            </button>
-            <button onClick={cancel} className="py-1 text-center text-sm text-white/70 hover:text-white">
+            <button
+              onClick={cancel}
+              className="py-1 text-center text-sm text-white/70 hover:text-white"
+            >
               Cancel
             </button>
           </div>

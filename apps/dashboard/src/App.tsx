@@ -16,6 +16,8 @@ import { Reports } from './pages/Reports';
 import { Reviews } from './pages/Reviews';
 import { Settings } from './pages/Settings';
 import { TimeClock } from './pages/TimeClock';
+import { MyLeave } from './pages/MyLeave';
+import { ChangePassword } from './pages/ChangePassword';
 
 function Loading() {
   return (
@@ -67,6 +69,8 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route path="/" element={<Landing />} />
             <Route path="/my" element={<TimeClock />} />
+            <Route path="/my/leave" element={<MyLeave />} />
+            <Route path="/my/password" element={<ChangePassword />} />
             <Route path="/employees" element={<Employees />} />
             <Route path="/employees/new" element={<EmployeeForm />} />
             <Route path="/employees/:id" element={<EmployeeForm />} />
