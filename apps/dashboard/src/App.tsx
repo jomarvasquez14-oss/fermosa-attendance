@@ -15,6 +15,7 @@ import { Leave } from './pages/Leave';
 import { Reports } from './pages/Reports';
 import { Reviews } from './pages/Reviews';
 import { Settings } from './pages/Settings';
+import { TimeClock } from './pages/TimeClock';
 
 function Loading() {
   return (
@@ -29,6 +30,13 @@ function LoginGate() {
   if (loading) return <Loading />;
   if (session) return <Navigate to="/" replace />;
   return <Login />;
+}
+
+/** Plain employees land on their own time clock; managers/admins on the ops board. */
+function Landing() {
+  const { profile } = useAuth();
+  if (profile && profile.role === 'employee') return <Navigate to="/my" replace />;
+  return <Overview />;
 }
 
 function RequireAuth() {
@@ -57,7 +65,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginGate />} />
           <Route element={<RequireAuth />}>
-            <Route path="/" element={<Overview />} />
+            <Route path="/" element={<Landing />} />
+            <Route path="/my" element={<TimeClock />} />
             <Route path="/employees" element={<Employees />} />
             <Route path="/employees/new" element={<EmployeeForm />} />
             <Route path="/employees/:id" element={<EmployeeForm />} />

@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   Clock,
+  Fingerprint,
   LayoutDashboard,
   Menu,
   Network,
@@ -29,7 +30,8 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { to: '/', end: true, label: 'Dashboard', icon: LayoutDashboard, access: 'all' },
+  { to: '/my', label: 'My time clock', icon: Fingerprint, access: 'all' },
+  { to: '/', end: true, label: 'Dashboard', icon: LayoutDashboard, access: 'manager' },
   { to: '/employees', label: 'Employees', icon: Users, access: 'manager' },
   { to: '/punches', label: 'Punches', icon: Clock, access: 'manager' },
   { to: '/reviews', label: 'Reviews', icon: ClipboardCheck, access: 'manager' },
