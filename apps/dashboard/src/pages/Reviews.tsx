@@ -394,13 +394,17 @@ export function Reviews() {
                         >
                           Reject
                         </button>
-                        <button
-                          onClick={() => setCorrectId(correctId === r.id ? null : r.id)}
-                          className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-100"
-                        >
-                          Correct
-                        </button>
                       </>
+                    )}
+                    {/* Correct stays available after approval — an approved day can still be
+                        adjusted (it becomes `corrected`, which is still payable). */}
+                    {canReview && r.status !== 'rejected' && (
+                      <button
+                        onClick={() => setCorrectId(correctId === r.id ? null : r.id)}
+                        className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                      >
+                        {correctId === r.id ? 'Close' : 'Correct'}
+                      </button>
                     )}
                   </td>
                 </tr>

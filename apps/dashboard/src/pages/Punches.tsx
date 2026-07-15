@@ -1,10 +1,19 @@
-import { PUNCH_LABELS, type PunchSource, type PunchType } from '@fermosa/shared';
+import {
+  PUNCH_LABELS,
+  REVIEWER_ROLES,
+  punchWindowForWorkDate,
+  type AttendanceStatus,
+  type PunchSource,
+  type PunchType,
+} from '@fermosa/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { SelfieThumb } from '../components/SelfieThumb';
+import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 
 interface EventRow {
   id: string;
+  employee_id: string;
   type: PunchType;
   source: PunchSource;
   happened_at: string;
@@ -13,7 +22,16 @@ interface EventRow {
   distance_from_branch_m: number | null;
   selfie_path: string | null;
   employee: { full_name: string; employee_code: string } | null;
-  branch: { name: string } | null;
+  branch: { name: string; shift_start: string; shift_end: string } | null;
+}
+
+/** The daily record a punch rolls up into — what actually gets approved. */
+interface RecordLite {
+  id: string;
+  employee_id: string;
+  work_date: string;
+  status: AttendanceStatus;
+  branch: { shift_start: string; shift_end: string } | null;
 }
 
 const timeFmt = new Intl.DateTimeFormat('en-PH', {
@@ -26,6 +44,19 @@ const timeFmt = new Intl.DateTimeFormat('en-PH', {
 });
 
 const SOURCE_ICON: Record<PunchSource, string> = { mobile: '📱', web: '💻', kiosk: '🖥️' };
+
+const STATUS_BADGE: Record<AttendanceStatus, string> = {
+  pending_review: 'bg-amber-100 text-amber-700',
+  approved: 'bg-green-100 text-green-700',
+  rejected: 'bg-red-100 text-red-700',
+  corrected: 'bg-sky-100 text-sky-700',
+};
+const STATUS_LABEL: Record<AttendanceStatus, string> = {
+  pending_review: 'Pending',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  corrected: 'Corrected',
+};
 
 function fenceBadge(e: EventRow) {
   if (e.inside_geofence === null)
@@ -44,16 +75,23 @@ function syncedLate(e: EventRow): boolean {
   return new Date(e.received_at).getTime() - new Date(e.happened_at).getTime() > 5 * 60 * 1000;
 }
 
+const DAY_MS = 86_400_000;
+
 export function Punches() {
+  const { profile } = useAuth();
+  const canReview = profile ? REVIEWER_ROLES.includes(profile.role) : false;
+
   const [rows, setRows] = useState<EventRow[]>([]);
   const [selfies, setSelfies] = useState<Record<string, string>>({});
+  const [records, setRecords] = useState<Record<string, RecordLite>>({}); // eventId → day record
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
     supabase
       .from('attendance_events')
       .select(
-        'id, type, source, happened_at, received_at, inside_geofence, distance_from_branch_m, selfie_path, employee:profiles(full_name, employee_code), branch:branches(name)',
+        'id, employee_id, type, source, happened_at, received_at, inside_geofence, distance_from_branch_m, selfie_path, employee:profiles(full_name, employee_code), branch:branches(name, shift_start, shift_end)',
       )
       .order('happened_at', { ascending: false })
       .limit(50)
@@ -61,15 +99,45 @@ export function Punches() {
         const list = (data as unknown as EventRow[]) ?? [];
         setRows(list);
         setLoading(false);
+
+        // Selfie thumbnails (signed URLs).
         const paths = list.filter((r) => r.selfie_path).map((r) => r.selfie_path!);
         if (paths.length > 0) {
           const { data: signed } = await supabase.storage.from('selfies').createSignedUrls(paths, 600);
-          const map: Record<string, string> = {};
+          const smap: Record<string, string> = {};
           signed?.forEach((s) => {
-            if (s.signedUrl && s.path) map[s.path] = s.signedUrl;
+            if (s.signedUrl && s.path) smap[s.path] = s.signedUrl;
           });
-          setSelfies(map);
+          setSelfies(smap);
         }
+
+        // Map each punch to its daily attendance record (what gets approved).
+        const employeeIds = [...new Set(list.map((e) => e.employee_id))];
+        if (employeeIds.length === 0) {
+          setRecords({});
+          return;
+        }
+        const times = list.map((e) => new Date(e.happened_at).getTime());
+        const from = new Date(Math.min(...times) - 2 * DAY_MS).toISOString().slice(0, 10);
+        const to = new Date(Math.max(...times) + DAY_MS).toISOString().slice(0, 10);
+        const { data: recData } = await supabase
+          .from('attendance_records')
+          .select('id, employee_id, work_date, status, branch:branches(shift_start, shift_end)')
+          .in('employee_id', employeeIds)
+          .gte('work_date', from)
+          .lte('work_date', to);
+        const recs = (recData as unknown as RecordLite[]) ?? [];
+        const rmap: Record<string, RecordLite> = {};
+        for (const e of list) {
+          const t = new Date(e.happened_at).getTime();
+          const hit = recs.find((r) => {
+            if (r.employee_id !== e.employee_id || !r.branch) return false;
+            const w = punchWindowForWorkDate(r.work_date, r.branch.shift_start, r.branch.shift_end);
+            return t >= new Date(w.startIso).getTime() && t < new Date(w.endIso).getTime();
+          });
+          if (hit) rmap[e.id] = hit;
+        }
+        setRecords(rmap);
       });
   }, []);
 
@@ -79,13 +147,59 @@ export function Punches() {
     return () => clearInterval(t);
   }, [load]);
 
+  const review = async (recordId: string, status: AttendanceStatus) => {
+    setError(null);
+    let note: string | null = null;
+    if (status === 'rejected') {
+      note = window.prompt('Reason for rejection:');
+      if (!note?.trim()) return;
+    }
+    const { error: rpcErr } = await supabase.rpc('review_attendance', {
+      p_record_id: recordId,
+      p_status: status,
+      p_note: note,
+      p_corrections: null,
+    });
+    if (rpcErr) setError(rpcErr.message);
+    else load();
+  };
+
+  const reviewCell = (e: EventRow) => {
+    const rec = records[e.id];
+    if (!rec) return <span className="text-xs text-gray-400">—</span>;
+    if (rec.status === 'pending_review' && canReview) {
+      return (
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => review(rec.id, 'approved')}
+            className="rounded-lg bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700"
+          >
+            Approve
+          </button>
+          <button
+            onClick={() => review(rec.id, 'rejected')}
+            className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
+          >
+            Reject
+          </button>
+        </div>
+      );
+    }
+    return (
+      <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_BADGE[rec.status]}`}>
+        {STATUS_LABEL[rec.status]}
+      </span>
+    );
+  };
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Punches</h2>
           <p className="text-sm text-gray-500">
-            Latest raw clock events (auto-refreshes every 10s). Approve or correct them on the Reviews page.
+            Latest raw clock events (auto-refreshes every 10s). Approving here approves the whole day; use
+            Reviews for corrections.
           </p>
         </div>
         <button
@@ -95,6 +209,8 @@ export function Punches() {
           Refresh
         </button>
       </div>
+
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
       <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-left text-sm">
@@ -106,7 +222,7 @@ export function Punches() {
               <th className="px-4 py-2 font-medium">Punch</th>
               <th className="px-4 py-2 font-medium">Branch</th>
               <th className="px-4 py-2 font-medium">Geofence</th>
-              <th className="px-4 py-2 font-medium">Sync</th>
+              <th className="px-4 py-2 font-medium">Review</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -137,7 +253,14 @@ export function Punches() {
                     <span className="text-xs text-gray-300">—</span>
                   )}
                 </td>
-                <td className="px-4 py-2 text-gray-900">{timeFmt.format(new Date(e.happened_at))}</td>
+                <td className="whitespace-nowrap px-4 py-2 text-gray-900">
+                  {timeFmt.format(new Date(e.happened_at))}
+                  {syncedLate(e) && (
+                    <span className="ml-1 text-xs text-sky-600" title="Synced late — this punch was made offline">
+                      ⏱
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-2">
                   <span className="font-medium text-gray-900">{e.employee?.full_name ?? '—'}</span>{' '}
                   <span className="text-xs text-gray-500">{e.employee?.employee_code}</span>
@@ -147,15 +270,7 @@ export function Punches() {
                 </td>
                 <td className="px-4 py-2 text-gray-600">{e.branch?.name ?? '—'}</td>
                 <td className="px-4 py-2">{fenceBadge(e)}</td>
-                <td className="px-4 py-2">
-                  {syncedLate(e) ? (
-                    <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-700">
-                      Synced late (offline)
-                    </span>
-                  ) : (
-                    <span className="text-xs text-gray-400">Live</span>
-                  )}
-                </td>
+                <td className="px-4 py-2">{reviewCell(e)}</td>
               </tr>
             ))}
           </tbody>
