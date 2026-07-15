@@ -1,5 +1,6 @@
 import { PUNCH_LABELS, type PunchSource, type PunchType } from '@fermosa/shared';
 import { useCallback, useEffect, useState } from 'react';
+import { SelfieThumb } from '../components/SelfieThumb';
 import { supabase } from '../lib/supabase';
 
 interface EventRow {
@@ -84,7 +85,7 @@ export function Punches() {
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Punches</h2>
           <p className="text-sm text-gray-500">
-            Latest raw clock events (auto-refreshes every 10s). Approval workflow arrives in M3.
+            Latest raw clock events (auto-refreshes every 10s). Approve or correct them on the Reviews page.
           </p>
         </div>
         <button
@@ -125,9 +126,9 @@ export function Punches() {
               <tr key={e.id} className="hover:bg-gray-50">
                 <td className="px-4 py-2">
                   {e.selfie_path && selfies[e.selfie_path] ? (
-                    <img
-                      src={selfies[e.selfie_path]}
-                      alt="Punch selfie"
+                    <SelfieThumb
+                      src={selfies[e.selfie_path]!}
+                      alt={`${e.employee?.full_name ?? 'Selfie'} · ${PUNCH_LABELS[e.type]} · ${timeFmt.format(new Date(e.happened_at))}`}
                       className="h-10 w-10 rounded-full object-cover"
                     />
                   ) : e.type === 'clock_in' || e.type === 'clock_out' ? (

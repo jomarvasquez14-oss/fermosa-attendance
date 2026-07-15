@@ -7,6 +7,7 @@ import {
   type PunchType,
 } from '@fermosa/shared';
 import { useCallback, useEffect, useState } from 'react';
+import { SelfieThumb } from '../components/SelfieThumb';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 
@@ -141,10 +142,11 @@ function DayDetail({ record }: { record: RecordRow }) {
       {events.map((e) => (
         <div key={e.id} className="w-40 rounded-lg border border-gray-200 bg-white p-2">
           {e.selfie_path && selfies[e.selfie_path] ? (
-            <img
-              src={selfies[e.selfie_path]}
-              alt={`Selfie for ${PUNCH_LABELS[e.type]}`}
+            <SelfieThumb
+              src={selfies[e.selfie_path]!}
+              alt={`Selfie · ${PUNCH_LABELS[e.type]} · ${timeFmt.format(new Date(e.happened_at))}`}
               className="h-32 w-full rounded object-cover"
+              frameClassName="w-full rounded"
             />
           ) : (
             <div className="flex h-32 w-full items-center justify-center rounded bg-gray-100 text-xs text-gray-400">

@@ -43,7 +43,7 @@ export function Login() {
             </label>
             <input
               id="password"
-              type="password"
+              type="text"
               required
               autoComplete="current-password"
               value={password}
