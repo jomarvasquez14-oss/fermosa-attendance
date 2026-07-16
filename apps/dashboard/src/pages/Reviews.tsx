@@ -7,7 +7,7 @@ import {
   type PunchSource,
   type PunchType,
 } from '@fermosa/shared';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { SelfieThumb } from '../components/SelfieThumb';
 import { useAuth } from '../lib/auth';
 import { getSelfieUrls } from '../lib/selfieUrls';
@@ -496,8 +496,8 @@ export function Reviews() {
               </tr>
             )}
             {rows.map((r) => (
-              <>
-                <tr key={r.id} className="hover:bg-gray-50">
+              <Fragment key={r.id}>
+                <tr className="hover:bg-gray-50">
                   <td className="whitespace-nowrap px-4 py-2 text-gray-900">
                     {r.work_date}
                     {r.day_class && DAY_CLASS_LABEL[r.day_class] && (
@@ -607,7 +607,7 @@ export function Reviews() {
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>

@@ -6,9 +6,10 @@
       "runtimeExecutable": "cmd.exe",
       "runtimeArgs": [
         "/c",
-        "set PATH=C:\\Users\\mai\\AppData\\Local\\Programs\\nodejs;%PATH% && npm run dashboard"
+        "set PATH=C:\\Users\\mai\\AppData\\Local\\Programs\\nodejs;%PATH% && npm run dashboard -- -- --port %PORT%"
       ],
-      "port": 5173
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }
