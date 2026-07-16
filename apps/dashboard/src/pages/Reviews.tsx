@@ -6,7 +6,7 @@ import {
   type PunchSource,
   type PunchType,
 } from '@fermosa/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SelfieThumb } from '../components/SelfieThumb';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
@@ -38,6 +38,8 @@ const FLAG_BADGE: Record<string, string> = {
   no_clock_out: 'bg-red-100 text-red-700',
   absent: 'bg-red-100 text-red-700',
   on_leave: 'bg-green-100 text-green-700',
+  half_day: 'bg-orange-100 text-orange-700', // 1+ hr late — payroll counts 0.5 day
+  time_mismatch: 'bg-red-100 text-red-700', // device clock vs server clock gap
 };
 
 const DAY_CLASS_LABEL: Record<string, string> = {
@@ -235,6 +237,13 @@ function CorrectionForm({
   );
 }
 
+interface FilterOption {
+  id: string;
+  full_name?: string;
+  employee_code?: string;
+  name?: string;
+}
+
 export function Reviews() {
   const { profile } = useAuth();
   const [rows, setRows] = useState<RecordRow[]>([]);
@@ -243,9 +252,35 @@ export function Reviews() {
   const [correctId, setCorrectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Extra filters (RLS already scopes visibility; these narrow within it).
+  const [employees, setEmployees] = useState<FilterOption[]>([]);
+  const [branches, setBranches] = useState<FilterOption[]>([]);
+  const [employeeId, setEmployeeId] = useState('');
+  const [branchId, setBranchId] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
   const canReview = profile ? REVIEWER_ROLES.includes(profile.role) : false;
 
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('id, full_name, employee_code')
+      .order('full_name')
+      .then(({ data }) => setEmployees((data as FilterOption[]) ?? []));
+    supabase
+      .from('branches')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => setBranches((data as FilterOption[]) ?? []));
+  }, []);
+
+  // Discard out-of-order responses when filters change quickly.
+  const loadSeq = useRef(0);
+
   const load = useCallback(() => {
+    const seq = ++loadSeq.current;
     let q = supabase
       .from('attendance_records')
       .select(
@@ -254,8 +289,15 @@ export function Reviews() {
       .order('work_date', { ascending: false })
       .limit(100);
     if (statusFilter !== 'all') q = q.eq('status', statusFilter);
-    q.then(({ data }) => setRows((data as unknown as RecordRow[]) ?? []));
-  }, [statusFilter]);
+    if (employeeId) q = q.eq('employee_id', employeeId);
+    if (branchId) q = q.eq('branch_id', branchId);
+    if (fromDate) q = q.gte('work_date', fromDate);
+    if (toDate) q = q.lte('work_date', toDate);
+    q.then(({ data }) => {
+      if (seq !== loadSeq.current) return; // a newer load superseded this one
+      setRows((data as unknown as RecordRow[]) ?? []);
+    });
+  }, [statusFilter, employeeId, branchId, fromDate, toDate]);
 
   useEffect(load, [load]);
 
@@ -285,26 +327,69 @@ export function Reviews() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-ink">Attendance reviews</h2>
-          <p className="text-sm text-gray-500">
-            {canReview
-              ? 'Only approved attendance becomes official. Rejections and corrections require a note.'
-              : 'View-only: approvals are handled by HR, operations, or super admin.'}
-          </p>
-        </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="input"
-        >
-          <option value="pending_review">Pending review</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-          <option value="corrected">Corrected</option>
-          <option value="all">All</option>
-        </select>
+      <div>
+        <h2 className="text-lg font-semibold text-ink">Attendance reviews</h2>
+        <p className="text-sm text-gray-500">
+          {canReview
+            ? 'Only approved attendance becomes official. Rejections and corrections require a note.'
+            : 'View-only: approvals are handled by HR, operations, or super admin.'}
+        </p>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-end gap-3 card p-4">
+        <label className="text-sm">
+          <span className="block text-xs font-medium text-gray-500">Status</span>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="mt-1 input">
+            <option value="pending_review">Pending review</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="corrected">Corrected</option>
+            <option value="all">All</option>
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="block text-xs font-medium text-gray-500">Employee</span>
+          <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="mt-1 input">
+            <option value="">All employees</option>
+            {employees.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.full_name} ({e.employee_code})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="block text-xs font-medium text-gray-500">Branch</span>
+          <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="mt-1 input">
+            <option value="">All branches</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="block text-xs font-medium text-gray-500">From</span>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="mt-1 input" />
+        </label>
+        <label className="text-sm">
+          <span className="block text-xs font-medium text-gray-500">To</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="mt-1 input" />
+        </label>
+        {(employeeId || branchId || fromDate || toDate) && (
+          <button
+            onClick={() => {
+              setEmployeeId('');
+              setBranchId('');
+              setFromDate('');
+              setToDate('');
+            }}
+            className="btn text-sm"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}

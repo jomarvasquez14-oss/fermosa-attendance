@@ -169,7 +169,9 @@ export type RecordFlag =
   | 'no_clock_out'
   | 'overtime'
   | 'absent'
-  | 'on_leave';
+  | 'on_leave'
+  | 'half_day' // late >= attendance_settings.half_day_late_min — counts 0.5 in payroll
+  | 'time_mismatch'; // device time vs server receive time gap > 10 min
 
 export interface Profile {
   id: string; // = auth.users.id

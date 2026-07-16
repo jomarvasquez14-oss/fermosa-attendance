@@ -27,6 +27,7 @@ export function Settings() {
   const [grace, setGrace] = useState('15');
   const [otThreshold, setOtThreshold] = useState('30');
   const [minBreak, setMinBreak] = useState('60');
+  const [halfDayLate, setHalfDayLate] = useState('60');
   const [holidays, setHolidays] = useState<HolidayRow[]>([]);
   const [hDate, setHDate] = useState('');
   const [hName, setHName] = useState('');
@@ -44,6 +45,7 @@ export function Settings() {
         setGrace(String(data.late_grace_min));
         setOtThreshold(String(data.ot_threshold_min));
         setMinBreak(String(data.min_break_min));
+        setHalfDayLate(String(data.half_day_late_min ?? 60));
       }
     });
     supabase.from('holidays').select('id, holiday_date, name, kind').order('holiday_date')
@@ -64,6 +66,7 @@ export function Settings() {
         late_grace_min: Number(grace),
         ot_threshold_min: Number(otThreshold),
         min_break_min: Number(minBreak),
+        half_day_late_min: Number(halfDayLate),
       })
       .eq('company_id', profile!.company_id);
     if (err) setError(err.message);
@@ -150,6 +153,13 @@ export function Settings() {
             <label className={labelClass}>OT threshold (minutes)</label>
             <input type="number" min={0} max={240} value={otThreshold} onChange={(e) => setOtThreshold(e.target.value)} className={inputClass} />
             <p className="mt-1 text-xs text-gray-500">Time past shift end must exceed this before overtime counts.</p>
+          </div>
+          <div>
+            <label className={labelClass}>Half-day when late (minutes)</label>
+            <input type="number" min={0} max={480} value={halfDayLate} onChange={(e) => setHalfDayLate(e.target.value)} className={inputClass} />
+            <p className="mt-1 text-xs text-gray-500">
+              Arriving this late (or more) makes the day count as half a day in payroll. 0 turns the rule off.
+            </p>
           </div>
           <div>
             <label className={labelClass}>Minimum break (minutes)</label>

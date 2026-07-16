@@ -69,6 +69,17 @@ interface BranchLite {
 const EFF_COLS =
   'id, employee_id, branch_id, work_date, status, day_class, flags, first_in, last_out, worked_minutes, late_minutes, undertime_minutes, overtime_minutes';
 
+// Colored pills for approval/leave statuses in the on-screen tables (exports
+// keep plain text). Keyed by the raw status values the reports emit.
+const STATUS_PILL: Record<string, { label: string; cls: string }> = {
+  pending_review: { label: 'Pending', cls: 'bg-amber-100 text-amber-700' },
+  approved: { label: 'Approved', cls: 'bg-green-100 text-green-700' },
+  rejected: { label: 'Rejected', cls: 'bg-red-100 text-red-700' },
+  corrected: { label: 'Corrected', cls: 'bg-sky-100 text-sky-700' },
+  pending: { label: 'Pending', cls: 'bg-amber-100 text-amber-700' },
+  cancelled: { label: 'Cancelled', cls: 'bg-gray-100 text-gray-600' },
+};
+
 const hours = (min: number) => (min / 60).toFixed(2);
 const fmtDays = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const timeManila = (iso: string | null) =>
@@ -468,11 +479,27 @@ export function Reports() {
             )}
             {table.rows.map((row, i) => (
               <tr key={i} className="hover:bg-gray-50">
-                {row.map((cell, j) => (
-                  <td key={j} className="whitespace-nowrap px-3 py-2 text-gray-700">
-                    {cell === null || cell === '' ? <span className="text-gray-300">—</span> : cell}
-                  </td>
-                ))}
+                {row.map((cell, j) => {
+                  const header = table.headers[j];
+                  const pill =
+                    (header === 'Approval' || (reportType === 'leave' && header === 'Status')) &&
+                    typeof cell === 'string'
+                      ? STATUS_PILL[cell]
+                      : undefined;
+                  return (
+                    <td key={j} className="whitespace-nowrap px-3 py-2 text-gray-700">
+                      {pill ? (
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${pill.cls}`}>
+                          {pill.label}
+                        </span>
+                      ) : cell === null || cell === '' ? (
+                        <span className="text-gray-300">—</span>
+                      ) : (
+                        cell
+                      )}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>

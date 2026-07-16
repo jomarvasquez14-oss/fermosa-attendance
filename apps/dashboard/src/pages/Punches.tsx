@@ -6,7 +6,7 @@ import {
   type PunchSource,
   type PunchType,
 } from '@fermosa/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { SelfieThumb } from '../components/SelfieThumb';
 import { useAuth } from '../lib/auth';
@@ -71,12 +71,28 @@ function fenceBadge(e: EventRow) {
   );
 }
 
-/** Punch synced noticeably later than it happened (offline punch or clock drift). */
-function syncedLate(e: EventRow): boolean {
-  return new Date(e.received_at).getTime() - new Date(e.happened_at).getTime() > 5 * 60 * 1000;
+/**
+ * Minutes between the device's stated punch time and the server receive time.
+ * Big gaps mean an offline punch that synced late OR a manipulated device
+ * clock — either way HR should glance at it (mirrors the engine's
+ * `time_mismatch` flag, same 10-minute threshold).
+ */
+function timeGapMin(e: EventRow): number {
+  return Math.round(Math.abs(new Date(e.received_at).getTime() - new Date(e.happened_at).getTime()) / 60_000);
 }
 
 const DAY_MS = 86_400_000;
+
+interface EmployeeOption {
+  id: string;
+  full_name: string;
+  employee_code: string;
+}
+
+interface BranchOption {
+  id: string;
+  name: string;
+}
 
 export function Punches() {
   const { profile } = useAuth();
@@ -88,15 +104,48 @@ export function Punches() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(() => {
+  // Filters (RLS already scopes what a branch manager can see; these narrow further).
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [employeeId, setEmployeeId] = useState('');
+  const [branchId, setBranchId] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
+  useEffect(() => {
     supabase
+      .from('profiles')
+      .select('id, full_name, employee_code')
+      .order('full_name')
+      .then(({ data }) => setEmployees((data as EmployeeOption[]) ?? []));
+    supabase
+      .from('branches')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => setBranches((data as BranchOption[]) ?? []));
+  }, []);
+
+  // Discard out-of-order responses when filters change quickly.
+  const loadSeq = useRef(0);
+
+  const load = useCallback(() => {
+    const seq = ++loadSeq.current;
+    const filtered = Boolean(employeeId || branchId || fromDate || toDate);
+    let q = supabase
       .from('attendance_events')
       .select(
         'id, employee_id, type, source, happened_at, received_at, inside_geofence, distance_from_branch_m, selfie_path, employee:profiles(full_name, employee_code), branch:branches(name, shift_start, shift_end)',
       )
       .order('happened_at', { ascending: false })
-      .limit(50)
-      .then(async ({ data }) => {
+      .limit(filtered ? 100 : 50);
+    if (employeeId) q = q.eq('employee_id', employeeId);
+    if (branchId) q = q.eq('branch_id', branchId);
+    // Manila calendar days → UTC instants.
+    if (fromDate) q = q.gte('happened_at', new Date(`${fromDate}T00:00:00+08:00`).toISOString());
+    if (toDate) q = q.lt('happened_at', new Date(new Date(`${toDate}T00:00:00+08:00`).getTime() + DAY_MS).toISOString());
+    q.then(async ({ data }) => {
+        if (seq !== loadSeq.current) return; // a newer load superseded this one
         const list = (data as unknown as EventRow[]) ?? [];
         setRows(list);
         setLoading(false);
@@ -105,6 +154,7 @@ export function Punches() {
         const paths = list.filter((r) => r.selfie_path).map((r) => r.selfie_path!);
         if (paths.length > 0) {
           const { data: signed } = await supabase.storage.from('selfies').createSignedUrls(paths, 600);
+          if (seq !== loadSeq.current) return;
           const smap: Record<string, string> = {};
           signed?.forEach((s) => {
             if (s.signedUrl && s.path) smap[s.path] = s.signedUrl;
@@ -127,6 +177,7 @@ export function Punches() {
           .in('employee_id', employeeIds)
           .gte('work_date', from)
           .lte('work_date', to);
+        if (seq !== loadSeq.current) return;
         const recs = (recData as unknown as RecordLite[]) ?? [];
         const rmap: Record<string, RecordLite> = {};
         for (const e of list) {
@@ -140,7 +191,7 @@ export function Punches() {
         }
         setRecords(rmap);
       });
-  }, []);
+  }, [employeeId, branchId, fromDate, toDate]);
 
   useEffect(() => {
     load();
@@ -206,6 +257,52 @@ export function Punches() {
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
+      <div className="mt-4 flex flex-wrap items-end gap-3 card p-4">
+        <label className="text-sm">
+          <span className="block text-xs font-medium text-gray-500">Employee</span>
+          <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="mt-1 input">
+            <option value="">All employees</option>
+            {employees.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.full_name} ({e.employee_code})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="block text-xs font-medium text-gray-500">Branch</span>
+          <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="mt-1 input">
+            <option value="">All branches</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="block text-xs font-medium text-gray-500">From</span>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="mt-1 input" />
+        </label>
+        <label className="text-sm">
+          <span className="block text-xs font-medium text-gray-500">To</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="mt-1 input" />
+        </label>
+        {(employeeId || branchId || fromDate || toDate) && (
+          <button
+            onClick={() => {
+              setEmployeeId('');
+              setBranchId('');
+              setFromDate('');
+              setToDate('');
+            }}
+            className="btn text-sm"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       <div className="card mt-4 overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="bg-ground text-muted">
@@ -249,9 +346,12 @@ export function Punches() {
                 </td>
                 <td className="whitespace-nowrap px-4 py-2 text-gray-900">
                   {timeFmt.format(new Date(e.happened_at))}
-                  {syncedLate(e) && (
-                    <span className="ml-1 text-xs text-sky-600" title="Synced late — this punch was made offline">
-                      ⏱
+                  {timeGapMin(e) > 10 && (
+                    <span
+                      className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                      title="Device time differs from server receive time — offline sync or a changed device clock; check the selfie."
+                    >
+                      ⏱ {timeGapMin(e)}m gap
                     </span>
                   )}
                 </td>
