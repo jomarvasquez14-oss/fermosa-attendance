@@ -49,6 +49,7 @@ export function EmployeeForm() {
 
   const [pin, setPin] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [loginName, setLoginName] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,11 +82,22 @@ export function EmployeeForm() {
         }
         setLoaded(true);
       });
+    supabase.rpc('admin_get_login', { p_user_id: id }).then(({ data }) => {
+      if (typeof data === 'string') setLoginName(data);
+    });
   }, [id]);
 
   const roleOptions = (Object.keys(ROLE_LABELS) as Role[]).filter(
     (r) => r !== 'super_admin' || me?.role === 'super_admin',
   );
+
+  // Their login (auth email). Show the bare username for @fermosa.local accounts.
+  const loginDisplay =
+    loginName === null
+      ? 'Loading…'
+      : loginName.endsWith('@fermosa.local')
+        ? loginName.slice(0, -'@fermosa.local'.length)
+        : loginName;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -202,6 +214,15 @@ export function EmployeeForm() {
       </h2>
 
       <form onSubmit={onSubmit} className="mt-4 space-y-4 card p-6">
+        {!isNew && (
+          <div>
+            <label className={labelClass}>Username (their login)</label>
+            <input readOnly value={loginDisplay} className={`${inputClass} bg-ground font-mono`} />
+            <p className="mt-1 text-xs text-gray-500">
+              What they type to sign in — read-only. Use “Reset password” below if they’re locked out.
+            </p>
+          </div>
+        )}
         {isNew && (
           <>
             <div>
