@@ -1,5 +1,14 @@
 import type { Profile, PunchType } from '@fermosa/shared';
 import { supabase } from './supabase';
+import {
+  insertPunch,
+  markFailed,
+  markSynced,
+  markSyncing,
+  setSelfieUploaded,
+  unsyncedPunches,
+  upsertSynced,
+} from './webPunchDb';
 
 export interface GpsFix {
   lat: number;
@@ -22,7 +31,7 @@ function uuid(): string {
   return `${h[0]}${h[1]}${h[2]}${h[3]}-${h[4]}${h[5]}-${h[6]}${h[7]}-${h[8]}${h[9]}-${h[10]}${h[11]}${h[12]}${h[13]}${h[14]}${h[15]}`;
 }
 
-/** Best-effort browser GPS: a punch must never hang or fail because of location. */
+/** Best-effort GPS: a punch must never hang or fail because of location. Works offline (device hardware). */
 export async function tryGetLocation(): Promise<GpsFix | null> {
   if (typeof navigator === 'undefined' || !navigator.geolocation || !window.isSecureContext) {
     return null;
@@ -38,11 +47,7 @@ export async function tryGetLocation(): Promise<GpsFix | null> {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(timer);
-        done({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy ?? null,
-        });
+        done({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null });
       },
       () => {
         clearTimeout(timer);
@@ -58,61 +63,128 @@ function base64ToBlob(b64: string, type = 'image/jpeg'): Blob {
   return new Blob([bytes], { type });
 }
 
-export interface WebPunchResult {
-  ok: boolean;
-  error?: string;
-  duplicate?: boolean;
-  inside_geofence?: boolean | null;
-  distance_m?: number | null;
-  gps: GpsFix | null;
-}
-
 /**
- * Record a punch from the browser as the signed-in employee. Online-only:
- * uploads the selfie (if any) to the employee's own storage prefix, then calls
- * the same `ingest_punch` RPC the mobile app uses, tagged `source='web'`. The
- * server recomputes the geofence — the client result is advisory only.
+ * Record a punch: write to the local IndexedDB queue immediately (with GPS +
+ * selfie), then kick off a sync. Never blocks or fails when offline — the punch
+ * is safe on disk and uploads on reconnect. Returns the GPS fix for an instant
+ * client-side geofence hint (the server recomputes the authoritative verdict).
  */
-export async function submitWebPunch(args: {
+export async function recordPunch(args: {
   profile: Profile;
   branchId: string | null;
   type: PunchType;
   selfieB64: string | null;
-}): Promise<WebPunchResult> {
-  const { profile, branchId, type, selfieB64 } = args;
+}): Promise<{ gps: GpsFix | null }> {
   const clientUuid = uuid();
   const gps = await tryGetLocation();
-
-  let selfiePath: string | null = null;
-  if (selfieB64) {
-    const path = `${profile.company_id}/${profile.id}/${clientUuid}.jpg`;
-    const { error: upErr } = await supabase.storage
-      .from('selfies')
-      .upload(path, base64ToBlob(selfieB64), { contentType: 'image/jpeg', upsert: true });
-    // A failed selfie upload never blocks the punch — it just stays unproven.
-    if (!upErr) selfiePath = path;
-  }
-
-  const { data, error } = await supabase.rpc('ingest_punch', {
-    p_client_uuid: clientUuid,
-    p_type: type,
-    p_happened_at: new Date().toISOString(),
-    p_branch_id: branchId,
-    p_lat: gps?.lat ?? null,
-    p_lng: gps?.lng ?? null,
-    p_gps_accuracy_m: gps?.accuracy ?? null,
-    p_source: 'web',
-    p_device_info: { web: true, ua: navigator.userAgent },
-    p_selfie_path: selfiePath,
+  await insertPunch({
+    client_uuid: clientUuid,
+    employee_id: args.profile.id,
+    type: args.type,
+    happened_at: new Date().toISOString(),
+    branch_id: args.branchId,
+    lat: gps?.lat ?? null,
+    lng: gps?.lng ?? null,
+    gps_accuracy_m: gps?.accuracy ?? null,
+    device_info: JSON.stringify({ web: true, ua: navigator.userAgent }),
+    selfie_b64: args.selfieB64,
   });
+  void syncPending(args.profile);
+  return { gps };
+}
 
-  if (error) return { ok: false, error: error.message, gps };
-  const r = data as { duplicate?: boolean; inside_geofence?: boolean | null; distance_m?: number | null };
-  return {
-    ok: true,
-    duplicate: r?.duplicate ?? false,
-    inside_geofence: r?.inside_geofence ?? null,
-    distance_m: r?.distance_m ?? null,
-    gps,
-  };
+let syncInFlight = false;
+
+/** Upload all pending/failed punches. Idempotent server-side via client_uuid. Skips when offline. */
+export async function syncPending(profile: Profile): Promise<{ synced: number; failed: number }> {
+  if (syncInFlight || !navigator.onLine) return { synced: 0, failed: 0 };
+  syncInFlight = true;
+  let synced = 0;
+  let failed = 0;
+  try {
+    const rows = await unsyncedPunches(profile.id);
+    for (const row of rows) {
+      await markSyncing(row.client_uuid);
+
+      // Selfie first: upload once, then reference it from the punch.
+      let selfiePath = row.selfie_path;
+      if (!selfiePath && row.selfie_b64) {
+        const path = `${profile.company_id}/${profile.id}/${row.client_uuid}.jpg`;
+        const { error: upErr } = await supabase.storage
+          .from('selfies')
+          .upload(path, base64ToBlob(row.selfie_b64), { contentType: 'image/jpeg', upsert: true });
+        if (upErr) {
+          await markFailed(row.client_uuid, `selfie upload: ${upErr.message}`);
+          failed++;
+          continue; // retry the whole punch later
+        }
+        await setSelfieUploaded(row.client_uuid, path);
+        selfiePath = path;
+      }
+
+      const { data, error } = await supabase.rpc('ingest_punch', {
+        p_client_uuid: row.client_uuid,
+        p_type: row.type,
+        p_happened_at: row.happened_at,
+        p_branch_id: row.branch_id,
+        p_lat: row.lat,
+        p_lng: row.lng,
+        p_gps_accuracy_m: row.gps_accuracy_m,
+        p_source: 'web',
+        p_device_info: row.device_info ? JSON.parse(row.device_info) : null,
+        p_selfie_path: selfiePath,
+      });
+      if (error) {
+        await markFailed(row.client_uuid, error.message);
+        failed++;
+      } else {
+        const r = data as { inside_geofence?: boolean | null; distance_m?: number | null };
+        await markSynced(row.client_uuid, {
+          inside_geofence: r?.inside_geofence ?? null,
+          distance_m: r?.distance_m ?? null,
+        });
+        synced++;
+      }
+    }
+  } finally {
+    syncInFlight = false;
+  }
+  return { synced, failed };
+}
+
+interface ServerPunchRow {
+  client_uuid: string;
+  type: PunchType;
+  happened_at: string;
+  branch_id: string | null;
+  inside_geofence: boolean | null;
+  distance_from_branch_m: number | null;
+  selfie_path: string | null;
+}
+
+/**
+ * Pull the employee's recent server punches into the local store (as synced),
+ * so the clock's status + recent list stay correct across sessions and devices
+ * (e.g. a punch made on the kiosk shows here). No-op offline.
+ */
+export async function hydrateFromServer(profile: Profile, sinceIso: string): Promise<void> {
+  if (!navigator.onLine) return;
+  const { data } = await supabase
+    .from('attendance_events')
+    .select('client_uuid, type, happened_at, branch_id, inside_geofence, distance_from_branch_m, selfie_path')
+    .eq('employee_id', profile.id)
+    .gte('happened_at', sinceIso)
+    .order('happened_at', { ascending: true });
+  for (const e of (data as ServerPunchRow[] | null) ?? []) {
+    await upsertSynced({
+      client_uuid: e.client_uuid,
+      employee_id: profile.id,
+      type: e.type,
+      happened_at: e.happened_at,
+      branch_id: e.branch_id,
+      inside_geofence: e.inside_geofence,
+      distance_m: e.distance_from_branch_m,
+      selfie_path: e.selfie_path,
+    });
+  }
 }

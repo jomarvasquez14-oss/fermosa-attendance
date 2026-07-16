@@ -12,7 +12,8 @@ import { PageHeader } from '../components/PageHeader';
 import { WebcamCapture } from '../components/WebcamCapture';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
-import { submitWebPunch } from '../lib/webPunch';
+import { hydrateFromServer, recordPunch, syncPending } from '../lib/webPunch';
+import { pendingCount, punchesSince, type LocalPunch, type LocalSyncStatus } from '../lib/webPunchDb';
 
 interface BranchInfo {
   id: string;
@@ -20,13 +21,6 @@ interface BranchInfo {
   lat: number;
   lng: number;
   geofence_radius_m: number;
-}
-
-interface PunchRow {
-  type: PunchType;
-  happened_at: string;
-  inside_geofence: boolean | null;
-  distance_from_branch_m: number | null;
 }
 
 const STATUS_STYLE = {
@@ -40,6 +34,13 @@ const STATUS_LABEL = {
   working: 'Working',
   on_break: 'On break',
 } as const;
+
+const SYNC_BADGE: Record<LocalSyncStatus, { label: string; cls: string }> = {
+  pending_sync: { label: '📱 Pending sync', cls: 'bg-amber-100 text-amber-700' },
+  syncing: { label: '⏳ Syncing…', cls: 'bg-sky-100 text-sky-700' },
+  synced: { label: '✅ Synced', cls: 'bg-green-100 text-green-700' },
+  failed: { label: '⚠️ Will retry', cls: 'bg-red-100 text-red-600' },
+};
 
 const clockFmt = new Intl.DateTimeFormat('en-PH', {
   timeZone: 'Asia/Manila',
@@ -68,12 +69,18 @@ function recentWindowStartIso(hours = 18): string {
   return new Date(Date.now() - hours * 3600 * 1000).toISOString();
 }
 
-/** Employee self-service time clock — the browser equivalent of the mobile home screen. */
+/**
+ * Employee self-service time clock — the browser equivalent of the mobile home
+ * screen. Offline-first: status + recent list come from the local IndexedDB
+ * queue, punches always save locally and sync in the background.
+ */
 export function TimeClock() {
   const { profile } = useAuth();
   const [now, setNow] = useState(() => new Date());
   const [branch, setBranch] = useState<BranchInfo | null>(null);
-  const [punches, setPunches] = useState<PunchRow[]>([]);
+  const [punches, setPunches] = useState<LocalPunch[]>([]);
+  const [pending, setPending] = useState(0);
+  const [online, setOnline] = useState(() => navigator.onLine);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,24 +92,62 @@ export function TimeClock() {
     return () => clearInterval(t);
   }, []);
 
-  const loadPunches = useCallback(async () => {
+  // Online/offline banner state.
+  useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    return () => {
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
+    };
+  }, []);
+
+  // Reload the list + pending badge from the local queue (works offline).
+  const refreshLocal = useCallback(async () => {
     if (!profile) return;
-    const { data } = await supabase
-      .from('attendance_events')
-      .select('type, happened_at, inside_geofence, distance_from_branch_m')
-      .eq('employee_id', profile.id)
-      .gte('happened_at', recentWindowStartIso())
-      .order('happened_at', { ascending: true });
-    setPunches((data as PunchRow[]) ?? []);
+    setPunches(await punchesSince(profile.id, recentWindowStartIso()));
+    setPending(await pendingCount(profile.id));
   }, [profile]);
 
+  // Full refresh: pull server punches in, push queued ones out, then re-read.
+  const refresh = useCallback(async () => {
+    if (!profile) return;
+    if (navigator.onLine) {
+      await hydrateFromServer(profile, recentWindowStartIso()).catch(() => {});
+      await syncPending(profile).catch(() => {});
+    }
+    await refreshLocal();
+  }, [profile, refreshLocal]);
+
+  // Sync triggers, mirroring mobile: mount, back-online, tab focus.
   useEffect(() => {
-    void loadPunches();
-  }, [loadPunches]);
+    void refresh();
+    const run = () => void refresh();
+    const onVis = () => {
+      if (!document.hidden) run();
+    };
+    window.addEventListener('online', run);
+    window.addEventListener('focus', run);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('online', run);
+      window.removeEventListener('focus', run);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [refresh]);
+
+  // While anything is queued, retry every 30 s.
+  useEffect(() => {
+    if (pending === 0) return;
+    const t = setInterval(() => void refresh(), 30_000);
+    return () => clearInterval(t);
+  }, [pending, refresh]);
 
   // Branch coordinates for the instant geofence hint (server stays authoritative).
   useEffect(() => {
-    if (!profile?.branch_id) return;
+    if (!profile?.branch_id || !navigator.onLine) return;
     supabase
       .from('branches')
       .select('id, name, lat, lng, geofence_radius_m')
@@ -121,12 +166,14 @@ export function TimeClock() {
       setBusy(true);
       setError(null);
       setNote(null);
-      const res = await submitWebPunch({ profile, branchId: profile.branch_id, type, selfieB64 });
-      if (!res.ok) {
-        setError(res.error ?? 'Punch failed — please try again.');
-      } else {
-        if (res.gps && branch) {
-          const f = checkGeofence(res.gps.lat, res.gps.lng, branch.lat, branch.lng, branch.geofence_radius_m);
+      try {
+        const { gps } = await recordPunch({ profile, branchId: profile.branch_id, type, selfieB64 });
+        if (!navigator.onLine) {
+          setNote(
+            `${PUNCH_LABELS[type]} saved on this device — it will sync automatically when you're back online.`,
+          );
+        } else if (gps && branch) {
+          const f = checkGeofence(gps.lat, gps.lng, branch.lat, branch.lng, branch.geofence_radius_m);
           setNote(
             f.inside
               ? `${PUNCH_LABELS[type]} recorded · inside ${branch.name} (${Math.round(f.distanceM)} m from center)`
@@ -135,17 +182,21 @@ export function TimeClock() {
         } else {
           setNote(`${PUNCH_LABELS[type]} recorded · no GPS fix, HR will review location`);
         }
-        await loadPunches();
+        await refreshLocal();
+        // Give the fire-and-forget sync a moment, then refresh the badges.
+        window.setTimeout(() => void refreshLocal(), 2500);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Punch failed — please try again.');
       }
       setBusy(false);
     },
-    [profile, branch, loadPunches],
+    [profile, branch, refreshLocal],
   );
 
   const onAction = (type: PunchType) => {
     if (busy) return;
     // Clock in/out require a selfie: open the camera, which calls back with a
-    // selfie (or null). Breaks stay one-tap.
+    // selfie. Breaks stay one-tap.
     if (SELFIE_PUNCH_TYPES.includes(type)) setSelfieFor(type);
     else void doPunch(type, null);
   };
@@ -158,6 +209,12 @@ export function TimeClock() {
   return (
     <div className="mx-auto max-w-xl">
       <PageHeader title="My time clock" crumb="My time clock" subtitle={branch?.name} />
+
+      {!online && (
+        <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+          📡 You're offline — punches are saved on this device and will sync when you reconnect.
+        </p>
+      )}
 
       <div className="card flex flex-col items-center py-8">
         <div className="text-5xl font-bold tabular-nums text-ink">{timeLabel}</div>
@@ -187,6 +244,17 @@ export function TimeClock() {
       {note && <p className="mt-4 rounded-xl bg-ground px-4 py-3 text-sm text-ink">{note}</p>}
       {error && <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
+      {pending > 0 && (
+        <div className="mt-4 flex items-center justify-between rounded-xl bg-sky-50 px-4 py-3">
+          <span className="text-sm text-sky-800">
+            {pending} punch{pending > 1 ? 'es' : ''} waiting to sync
+          </span>
+          <button onClick={() => void refresh()} disabled={!online} className="btn text-sm disabled:opacity-50">
+            Sync now
+          </button>
+        </div>
+      )}
+
       <div className="mt-6 flex flex-wrap gap-2">
         <Link to="/my/leave" className="btn">
           Leave &amp; balances
@@ -199,19 +267,22 @@ export function TimeClock() {
       <h3 className="mt-8 text-sm font-semibold uppercase tracking-wide text-muted">Recent punches</h3>
       <div className="mt-2 space-y-2">
         {punches.length === 0 && <p className="text-sm text-muted">No recent punches.</p>}
-        {[...punches].reverse().map((p, i) => (
-          <div key={`${p.happened_at}-${i}`} className="card flex items-center justify-between px-4 py-3">
+        {[...punches].reverse().map((p) => (
+          <div key={p.client_uuid} className="card flex items-center justify-between px-4 py-3">
             <div>
               <div className="text-sm font-semibold text-ink">{PUNCH_LABELS[p.type]}</div>
               <div className="text-xs text-muted">{punchTimeFmt.format(new Date(p.happened_at))}</div>
             </div>
-            {p.inside_geofence !== null && (
-              <span className="text-xs text-muted">
-                {p.inside_geofence
-                  ? '📍 In branch'
-                  : `📍 ${Math.round(p.distance_from_branch_m ?? 0)} m away`}
+            <div className="flex items-center gap-2">
+              {p.sync_status === 'synced' && p.inside_geofence !== null && (
+                <span className="text-xs text-muted">
+                  {p.inside_geofence ? '📍 In branch' : `📍 ${Math.round(p.distance_m ?? 0)} m away`}
+                </span>
+              )}
+              <span className={`pill text-xs ${SYNC_BADGE[p.sync_status].cls}`}>
+                {SYNC_BADGE[p.sync_status].label}
               </span>
-            )}
+            </div>
           </div>
         ))}
       </div>

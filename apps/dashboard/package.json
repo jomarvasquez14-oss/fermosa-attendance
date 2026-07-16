@@ -12,6 +12,7 @@
   "dependencies": {
     "@fermosa/shared": "*",
     "@supabase/supabase-js": "^2.47.0",
+    "idb": "^8.0.3",
     "lucide-react": "^1.24.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -25,6 +26,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.6.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vite-plugin-pwa": "^1.3.0"
   }
 }
