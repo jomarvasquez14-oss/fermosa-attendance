@@ -323,7 +323,7 @@ export function Punches() {
             {!loading && rows.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
-                  No punches yet — clock in from the mobile app.
+                  No punches yet.
                 </td>
               </tr>
             )}

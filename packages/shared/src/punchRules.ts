@@ -38,8 +38,8 @@ export function workStatusFromLastPunch(lastType: PunchType | null): WorkStatus 
 }
 
 export const PUNCH_LABELS: Record<PunchType, string> = {
-  clock_in: 'Clock In',
+  clock_in: 'Time In',
   break_start: 'Start Break',
   break_end: 'End Break',
-  clock_out: 'Clock Out',
+  clock_out: 'Time Out',
 };

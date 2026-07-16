@@ -1,4 +1,5 @@
 import {
+  BREAKS_ENABLED,
   COMPANY_WIDE_ROLES,
   PUNCH_LABELS,
   SELFIE_PUNCH_TYPES,
@@ -27,7 +28,7 @@ import { useAuth } from '@/lib/auth';
 import { colors, logoMark } from '@/theme';
 
 const STATUS_TEXT = {
-  clocked_out: { label: 'Clocked out', color: '#6b7280' },
+  clocked_out: { label: 'Timed out', color: '#6b7280' },
   working: { label: 'Working', color: '#15803d' },
   on_break: { label: 'On break', color: '#b45309' },
 } as const;
@@ -107,8 +108,15 @@ export default function HomeScreen() {
 
   const lastType: PunchType | null =
     punches.length > 0 ? punches[punches.length - 1].type : null;
-  const allowed = nextAllowedPunchTypes(lastType);
-  const status = STATUS_TEXT[workStatusFromLastPunch(lastType)];
+  const workStatus = workStatusFromLastPunch(lastType);
+  // Breaks are hidden for now — the engine deducts the 60-min break
+  // automatically on days over 5 h (see BREAKS_ENABLED in shared).
+  const allowed: PunchType[] = BREAKS_ENABLED
+    ? nextAllowedPunchTypes(lastType)
+    : workStatus === 'clocked_out'
+      ? ['clock_in']
+      : ['clock_out'];
+  const status = STATUS_TEXT[workStatus];
 
   const onPunch = async (type: PunchType) => {
     if (busy) return;

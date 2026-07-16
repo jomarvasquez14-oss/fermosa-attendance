@@ -1,4 +1,5 @@
 import {
+  BREAKS_ENABLED,
   COMPANY_WIDE_ROLES,
   PUNCH_LABELS,
   type PunchType,
@@ -29,7 +30,9 @@ type Step =
   | { name: 'result'; ok: boolean; message: string }
   | { name: 'exit' };
 
-const PUNCH_TYPES: PunchType[] = ['clock_in', 'break_start', 'break_end', 'clock_out'];
+const PUNCH_TYPES: PunchType[] = BREAKS_ENABLED
+  ? ['clock_in', 'break_start', 'break_end', 'clock_out']
+  : ['clock_in', 'clock_out'];
 
 export default function KioskScreen() {
   const { kiosk, deactivateKiosk } = useKiosk();

@@ -200,7 +200,7 @@ export function Overview() {
           subtitle={`${ROLE_LABELS[profile.role]} · ${profile.employee_code}`}
         />
         <div className="card p-6 text-sm text-muted">
-          Clock in and out, and file leave, from the Fermosa Attendance mobile app. This dashboard is
+          Time in and out, and file leave, from the Fermosa Attendance mobile app. This dashboard is
           for managers and HR.
         </div>
       </div>

@@ -1,4 +1,5 @@
 import {
+  BREAKS_ENABLED,
   PUNCH_LABELS,
   SELFIE_PUNCH_TYPES,
   checkGeofence,
@@ -30,7 +31,7 @@ const STATUS_STYLE = {
 } as const;
 
 const STATUS_LABEL = {
-  clocked_out: 'Clocked out',
+  clocked_out: 'Timed out',
   working: 'Working',
   on_break: 'On break',
 } as const;
@@ -157,8 +158,14 @@ export function TimeClock() {
   }, [profile?.branch_id]);
 
   const lastType: PunchType | null = punches.at(-1)?.type ?? null;
-  const allowed = nextAllowedPunchTypes(lastType);
   const workStatus = workStatusFromLastPunch(lastType);
+  // Breaks are hidden for now — the engine deducts the 60-min break
+  // automatically on days over 5 h (see BREAKS_ENABLED in shared).
+  const allowed: PunchType[] = BREAKS_ENABLED
+    ? nextAllowedPunchTypes(lastType)
+    : workStatus === 'clocked_out'
+      ? ['clock_in']
+      : ['clock_out'];
 
   const doPunch = useCallback(
     async (type: PunchType, selfieB64: string | null) => {

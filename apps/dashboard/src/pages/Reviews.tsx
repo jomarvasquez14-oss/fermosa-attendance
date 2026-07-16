@@ -1,6 +1,7 @@
 import {
   PUNCH_LABELS,
   REVIEWER_ROLES,
+  computeDayMinutes,
   punchWindowForWorkDate,
   type AttendanceStatus,
   type PunchSource,
@@ -18,6 +19,8 @@ interface RecordRow {
   status: AttendanceStatus;
   review_note: string | null;
   reviewed_at: string | null;
+  first_in: string | null;
+  last_out: string | null;
   worked_minutes: number | null;
   break_minutes: number | null;
   late_minutes: number | null;
@@ -25,7 +28,8 @@ interface RecordRow {
   overtime_minutes: number | null;
   day_class: string | null;
   flags: string[];
-  corrections: Record<string, number> | null;
+  // Minute overrides plus (since round 2) the corrected first_in/last_out ISO times.
+  corrections: Record<string, number | string> | null;
   employee: { id: string; full_name: string; employee_code: string } | null;
   branch: { name: string; shift_start: string; shift_end: string } | null;
   reviewer: { full_name: string } | null;
@@ -57,8 +61,19 @@ function fmtMinutes(m: number | null | undefined): string {
 
 /** Corrections layer over computed values. */
 function effective(r: RecordRow, key: 'worked_minutes' | 'late_minutes' | 'overtime_minutes'): number | null {
-  return r.corrections?.[key] ?? r[key];
+  return (r.corrections?.[key] as number | undefined) ?? r[key];
 }
+
+/** Corrected time-in/out over the raw punch times. */
+function effectiveTime(r: RecordRow, key: 'first_in' | 'last_out'): string | null {
+  return (r.corrections?.[key] as string | undefined) ?? r[key];
+}
+
+/** Friendlier flag wording ("Time In/Out" language). */
+const FLAG_TEXT: Record<string, string> = {
+  no_clock_out: 'no time out',
+  time_mismatch: 'time gap',
+};
 
 interface EventRow {
   id: string;
@@ -174,53 +189,102 @@ function DayDetail({ record }: { record: RecordRow }) {
   );
 }
 
+interface EngineSettings {
+  late_grace_min: number;
+  ot_threshold_min: number;
+  min_break_min: number;
+}
+
+// 24-hour Manila clock, for <input type="time"> prefills.
+const timeInputFmt = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Manila',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/**
+ * Time-based correction (decision 2026-07-16): HR enters the actual Time in /
+ * Time out, and the minute overrides are recomputed with the engine's own
+ * rules (shared computeDayMinutes). The corrected times are stored too, so
+ * Reviews and Reports show the fixed times.
+ */
 function CorrectionForm({
   record,
+  settings,
   onSave,
   onCancel,
 }: {
   record: RecordRow;
-  onSave: (note: string, corrections: Record<string, number>) => void;
+  settings: EngineSettings;
+  onSave: (note: string, corrections: Record<string, number | string>) => void;
   onCancel: () => void;
 }) {
-  const [worked, setWorked] = useState(String(effective(record, 'worked_minutes') ?? 0));
-  const [late, setLate] = useState(String(effective(record, 'late_minutes') ?? 0));
-  const [ot, setOt] = useState(String(effective(record, 'overtime_minutes') ?? 0));
+  const [inTime, setInTime] = useState(() => {
+    const t = effectiveTime(record, 'first_in');
+    return t ? timeInputFmt.format(new Date(t)) : '';
+  });
+  const [outTime, setOutTime] = useState(() => {
+    const t = effectiveTime(record, 'last_out');
+    return t ? timeInputFmt.format(new Date(t)) : '';
+  });
   const [note, setNote] = useState('');
+
+  // 'HH:MM' on the work date (Manila) → ISO. The out time rolls to the next
+  // day when it isn't after the in time (overnight shifts).
+  const inIso = inTime ? new Date(`${record.work_date}T${inTime}:00+08:00`).toISOString() : null;
+  let outIso = outTime ? new Date(`${record.work_date}T${outTime}:00+08:00`).toISOString() : null;
+  if (inIso && outIso && Date.parse(outIso) <= Date.parse(inIso)) {
+    outIso = new Date(Date.parse(outIso) + 24 * 3_600_000).toISOString();
+  }
+
+  let minutes = null;
+  if (inIso && outIso) {
+    minutes = computeDayMinutes({
+      workDate: record.work_date,
+      shiftStart: record.branch?.shift_start ?? '00:00',
+      shiftEnd: record.branch?.shift_end ?? '00:00',
+      firstInIso: inIso,
+      lastOutIso: outIso,
+      punchedBreakMin: record.break_minutes ?? 0,
+      lateGraceMin: settings.late_grace_min,
+      otThresholdMin: settings.ot_threshold_min,
+      minBreakMin: settings.min_break_min,
+    });
+    if (minutes && !record.branch) {
+      // No branch shift to compare against — only span-based numbers apply.
+      minutes = { ...minutes, late_minutes: 0, undertime_minutes: 0, overtime_minutes: 0 };
+    }
+  }
 
   return (
     <div className="border-t border-gray-200 bg-amber-50 px-4 py-3">
       <p className="text-xs font-semibold text-amber-800">
-        Correct this day — values below override the computed numbers (all in minutes).
+        Correct this day — enter the actual times; worked, late and OT are recalculated
+        automatically.
       </p>
       <div className="mt-2 flex flex-wrap items-end gap-3">
         <label className="text-xs text-gray-600">
-          Worked
-          <input value={worked} onChange={(e) => setWorked(e.target.value.replace(/\D/g, ''))}
-            className="mt-1 block w-24 input" />
+          Time in
+          <input type="time" value={inTime} onChange={(e) => setInTime(e.target.value)}
+            className="mt-1 block input" />
         </label>
         <label className="text-xs text-gray-600">
-          Late
-          <input value={late} onChange={(e) => setLate(e.target.value.replace(/\D/g, ''))}
-            className="mt-1 block w-20 input" />
-        </label>
-        <label className="text-xs text-gray-600">
-          Overtime
-          <input value={ot} onChange={(e) => setOt(e.target.value.replace(/\D/g, ''))}
-            className="mt-1 block w-20 input" />
+          Time out
+          <input type="time" value={outTime} onChange={(e) => setOutTime(e.target.value)}
+            className="mt-1 block input" />
         </label>
         <label className="min-w-64 flex-1 text-xs text-gray-600">
           Reason (required)
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. forgot to clock out, confirmed with branch manager"
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. forgot to time out, confirmed with branch manager"
             className="mt-1 block w-full input" />
         </label>
         <button
-          onClick={() => onSave(note, {
-            worked_minutes: Number(worked || 0),
-            late_minutes: Number(late || 0),
-            overtime_minutes: Number(ot || 0),
-          })}
-          disabled={!note.trim()}
+          onClick={() => {
+            if (!minutes || !inIso || !outIso) return;
+            onSave(note, { first_in: inIso, last_out: outIso, ...minutes });
+          }}
+          disabled={!note.trim() || !minutes}
           className="btn-primary"
         >
           Save correction
@@ -229,6 +293,11 @@ function CorrectionForm({
           Cancel
         </button>
       </div>
+      <p className="mt-2 text-xs text-amber-800">
+        {minutes
+          ? `→ worked ${fmtMinutes(minutes.worked_minutes)} · late ${minutes.late_minutes}m · undertime ${minutes.undertime_minutes}m · OT ${minutes.overtime_minutes}m (break ${minutes.break_minutes}m deducted)`
+          : 'Enter the time in and time out (out must be after in).'}
+      </p>
     </div>
   );
 }
@@ -258,6 +327,13 @@ export function Reviews() {
 
   const canReview = profile ? REVIEWER_ROLES.includes(profile.role) : false;
 
+  // Engine settings for the time-based correction math (company defaults as fallback).
+  const [engineSettings, setEngineSettings] = useState<EngineSettings>({
+    late_grace_min: 15,
+    ot_threshold_min: 30,
+    min_break_min: 60,
+  });
+
   useEffect(() => {
     supabase
       .from('profiles')
@@ -270,6 +346,13 @@ export function Reviews() {
       .eq('is_active', true)
       .order('name')
       .then(({ data }) => setBranches((data as FilterOption[]) ?? []));
+    supabase
+      .from('attendance_settings')
+      .select('late_grace_min, ot_threshold_min, min_break_min')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setEngineSettings(data as EngineSettings);
+      });
   }, []);
 
   // Discard out-of-order responses when filters change quickly.
@@ -280,7 +363,7 @@ export function Reviews() {
     let q = supabase
       .from('attendance_records')
       .select(
-        'id, work_date, status, review_note, reviewed_at, worked_minutes, break_minutes, late_minutes, undertime_minutes, overtime_minutes, day_class, flags, corrections, employee:profiles!attendance_records_employee_id_fkey(id, full_name, employee_code), branch:branches(name, shift_start, shift_end), reviewer:profiles!attendance_records_reviewed_by_fkey(full_name)',
+        'id, work_date, status, review_note, reviewed_at, first_in, last_out, worked_minutes, break_minutes, late_minutes, undertime_minutes, overtime_minutes, day_class, flags, corrections, employee:profiles!attendance_records_employee_id_fkey(id, full_name, employee_code), branch:branches(name, shift_start, shift_end), reviewer:profiles!attendance_records_reviewed_by_fkey(full_name)',
       )
       .order('work_date', { ascending: false })
       .limit(100);
@@ -301,7 +384,7 @@ export function Reviews() {
     id: string,
     status: AttendanceStatus,
     note: string | null = null,
-    corrections: Record<string, number> | null = null,
+    corrections: Record<string, number | string> | null = null,
   ) => {
     setError(null);
     if (status === 'rejected' && !note) {
@@ -396,6 +479,7 @@ export function Reviews() {
             <tr>
               <th className="px-4 py-2 font-medium">Date</th>
               <th className="px-4 py-2 font-medium">Employee</th>
+              <th className="px-4 py-2 font-medium">In / Out</th>
               <th className="px-4 py-2 font-medium">Worked</th>
               <th className="px-4 py-2 font-medium">Late / OT</th>
               <th className="px-4 py-2 font-medium">Flags</th>
@@ -406,7 +490,7 @@ export function Reviews() {
           <tbody className="divide-y divide-gray-100">
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={8} className="px-4 py-6 text-center text-gray-400">
                   Nothing here — punches create review entries automatically.
                 </td>
               </tr>
@@ -428,6 +512,21 @@ export function Reviews() {
                       {r.employee?.employee_code} · {r.branch?.name ?? 'no branch'}
                     </span>
                   </td>
+                  <td className="whitespace-nowrap px-4 py-2 text-xs text-gray-700">
+                    {(() => {
+                      const fi = effectiveTime(r, 'first_in');
+                      const lo = effectiveTime(r, 'last_out');
+                      const timeCorrected = Boolean(r.corrections?.first_in || r.corrections?.last_out);
+                      return (
+                        <>
+                          {fi ? timeFmt.format(new Date(fi)) : '—'} – {lo ? timeFmt.format(new Date(lo)) : '—'}
+                          {timeCorrected && (
+                            <span className="ml-1 text-sky-600" title="time corrected by HR">✏️</span>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </td>
                   <td className="whitespace-nowrap px-4 py-2 text-gray-900">
                     {fmtMinutes(effective(r, 'worked_minutes'))}
                     {r.corrections && <span className="ml-1 text-xs text-sky-600" title="corrected by HR">✏️</span>}
@@ -441,7 +540,7 @@ export function Reviews() {
                     <span className="flex flex-wrap gap-1">
                       {(r.flags ?? []).map((f) => (
                         <span key={f} className={`rounded-full px-1.5 py-0.5 text-[10px] ${FLAG_BADGE[f] ?? 'bg-gray-100 text-gray-600'}`}>
-                          {f.replace(/_/g, ' ')}
+                          {FLAG_TEXT[f] ?? f.replace(/_/g, ' ')}
                         </span>
                       ))}
                     </span>
@@ -491,9 +590,10 @@ export function Reviews() {
                 </tr>
                 {correctId === r.id && (
                   <tr key={`${r.id}-correct`}>
-                    <td colSpan={7} className="p-0">
+                    <td colSpan={8} className="p-0">
                       <CorrectionForm
                         record={r}
+                        settings={engineSettings}
                         onSave={(note, corrections) => void review(r.id, 'corrected', note, corrections)}
                         onCancel={() => setCorrectId(null)}
                       />
@@ -502,7 +602,7 @@ export function Reviews() {
                 )}
                 {openId === r.id && (
                   <tr key={`${r.id}-detail`}>
-                    <td colSpan={7} className="p-0">
+                    <td colSpan={8} className="p-0">
                       <DayDetail record={r} />
                     </td>
                   </tr>

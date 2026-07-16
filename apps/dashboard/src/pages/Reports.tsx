@@ -69,6 +69,13 @@ interface BranchLite {
 const EFF_COLS =
   'id, employee_id, branch_id, work_date, status, day_class, flags, first_in, last_out, worked_minutes, late_minutes, undertime_minutes, overtime_minutes';
 
+/** Flags as readable text ("Time In/Out" wording), for tables and exports. */
+function flagText(flags: string[] | null): string {
+  return (flags ?? [])
+    .map((f) => (f === 'no_clock_out' ? 'no time out' : f.replace(/_/g, ' ')))
+    .join(', ');
+}
+
 // Colored pills for approval/leave statuses in the on-screen tables (exports
 // keep plain text). Keyed by the raw status values the reports emit.
 const STATUS_PILL: Record<string, { label: string; cls: string }> = {
@@ -261,7 +268,7 @@ export function Reports() {
             return [
               e?.employee_code ?? '—', e?.full_name ?? '—', branchMap.get(r.branch_id) ?? '—', dayStatus(r),
               timeManila(r.first_in), timeManila(r.last_out), hours(r.worked_minutes), r.late_minutes,
-              (r.flags ?? []).join(', '), r.status,
+              flagText(r.flags), r.status,
             ];
           });
         return { headers, rows, sheetName: 'Daily register', filename: `daily_register_${dayDate}` };
@@ -272,7 +279,7 @@ export function Reports() {
           .sort((a, b) => a.work_date.localeCompare(b.work_date))
           .map((r) => [
             r.work_date, r.day_class ?? '—', timeManila(r.first_in), timeManila(r.last_out), hours(r.worked_minutes),
-            r.late_minutes, r.undertime_minutes, r.overtime_minutes, (r.flags ?? []).join(', '), r.status,
+            r.late_minutes, r.undertime_minutes, r.overtime_minutes, flagText(r.flags), r.status,
           ]);
         const tag = empMap.get(employeeId)?.employee_code ?? 'employee';
         return { headers, rows, sheetName: 'Timesheet', filename: `timesheet_${tag}_${periodTag}` };

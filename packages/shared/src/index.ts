@@ -1,5 +1,6 @@
 export * from './types';
 export * from './constants';
+export * from './dayMath';
 export * from './geofence';
 export * from './punchRules';
 export * from './schedule';

@@ -102,7 +102,7 @@ export function WebcamCapture({ title, onCapture, onCancel }: Props) {
 
       {failed ? (
         <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center">
-          <p className="text-sm font-semibold text-ink">A selfie is required to clock in</p>
+          <p className="text-sm font-semibold text-ink">A selfie is required to time in</p>
           <p className="mt-2 text-sm text-muted">
             Use a device with a working camera and allow camera access. On a computer or tablet the
             page must be opened over a secure (https) address.

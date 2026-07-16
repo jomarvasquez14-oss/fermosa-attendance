@@ -24,6 +24,14 @@ export const REVIEWER_ROLES: Role[] = ['hr', 'operations_manager', 'super_admin'
 /** Punch types that require a selfie (product decision: in/out only, breaks stay fast). */
 export const SELFIE_PUNCH_TYPES: PunchType[] = ['clock_in', 'clock_out'];
 
+/**
+ * Break punches are hidden for now (product decision 2026-07-16): staff only
+ * Time In / Time Out, and the engine automatically deducts the company's
+ * minimum break (60 min) on days spanning more than 5 hours. Flip to true to
+ * bring the break buttons back everywhere.
+ */
+export const BREAKS_ENABLED = false;
+
 /** Roles with company-wide visibility (vs. own-branch or own-records). */
 export const COMPANY_WIDE_ROLES: Role[] = ['hr', 'operations_manager', 'super_admin'];
 
