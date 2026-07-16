@@ -9,6 +9,7 @@ import {
 } from '@fermosa/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { CutoffSummary } from '../components/CutoffSummary';
 import { PageHeader } from '../components/PageHeader';
 import { WebcamCapture } from '../components/WebcamCapture';
 import { useAuth } from '../lib/auth';
@@ -462,6 +463,8 @@ export function TimeClock() {
           Change password
         </Link>
       </div>
+
+      <CutoffSummary profile={profile} />
 
       <h3 className="mt-8 text-sm font-semibold uppercase tracking-wide text-muted">Recent punches</h3>
       <div className="mt-2 space-y-2">
