@@ -238,7 +238,7 @@ export function MyLeave() {
             {isBirthdayType && (
               <div className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {profile.birthday
-                  ? `🎂 Birthday leave — one paid day, any working day in your birth month (${birthMonthName}).`
+                  ? `🎂 Birthday leave — one paid day, any day in your birth month (${birthMonthName}), rest days included.`
                   : '🎂 Birthday leave — ask HR to add your birthday to your profile first.'}
               </div>
             )}

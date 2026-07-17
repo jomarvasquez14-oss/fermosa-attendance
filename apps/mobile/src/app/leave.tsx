@@ -255,7 +255,7 @@ export default function LeaveScreen() {
             <View style={styles.birthdayHint}>
               <Text style={styles.birthdayHintText}>
                 {profile?.birthday
-                  ? `🎂 Birthday leave — one paid day, any working day in your birth month (${birthMonthName}).`
+                  ? `🎂 Birthday leave — one paid day, any day in your birth month (${birthMonthName}), rest days included.`
                   : '🎂 Birthday leave — ask HR to add your birthday to your profile first.'}
               </Text>
             </View>
