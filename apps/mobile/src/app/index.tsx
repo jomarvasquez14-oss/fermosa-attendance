@@ -12,6 +12,7 @@ import * as Network from 'expo-network';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   AppState,
   FlatList,
   Image,
@@ -33,6 +34,14 @@ const STATUS_TEXT = {
   working: { label: 'Working', color: '#15803d' },
   on_break: { label: 'On break', color: '#b45309' },
 } as const;
+
+const hireDateFmt = new Intl.DateTimeFormat('en-PH', {
+  timeZone: 'Asia/Manila',
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+const manilaYmdFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' });
 
 const SYNC_BADGE: Record<LocalPunch['sync_status'], { label: string; color: string }> = {
   pending_sync: { label: '📱 Pending sync', color: '#b45309' },
@@ -159,6 +168,20 @@ export default function HomeScreen() {
     return () => clearInterval(t);
   }, [pending, syncAndRefresh]);
 
+  // Birthday greeting — once per day when today (Manila) matches the birthday.
+  useEffect(() => {
+    if (!profile?.birthday) return;
+    const todayYmd = manilaYmdFmt.format(new Date());
+    if (profile.birthday.slice(5) !== todayYmd.slice(5)) return; // compare MM-DD
+    const key = `bday_seen.${profile.id}`;
+    if (kvGetSync(key) === todayYmd) return;
+    kvSetSync(key, todayYmd);
+    Alert.alert(
+      `🎂 Happy Birthday, ${profile.full_name.split(' ')[0]}!`,
+      "Wishing you a wonderful year ahead from the whole Fermosa team. Enjoy your day — don't forget your birthday leave this month 🎁",
+    );
+  }, [profile?.id, profile?.birthday]);
+
   const lastType: PunchType | null =
     punches.length > 0 ? punches[punches.length - 1].type : null;
   const workStatus = workStatusFromLastPunch(lastType);
@@ -247,6 +270,9 @@ export default function HomeScreen() {
               <View style={[styles.statusPill, { backgroundColor: `${status.color}18` }]}>
                 <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
               </View>
+              {profile?.date_hired && (
+                <Text style={styles.hired}>Hired {hireDateFmt.format(new Date(profile.date_hired))}</Text>
+              )}
             </View>
 
             {isRoving && (
@@ -410,6 +436,7 @@ const styles = StyleSheet.create({
   },
   clock: { fontSize: 40, fontWeight: '700', color: '#111827', fontVariant: ['tabular-nums'] },
   date: { fontSize: 14, color: '#6b7280', marginTop: 4 },
+  hired: { fontSize: 12, color: '#9ca3af', marginTop: 8 },
   statusPill: { marginTop: 12, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 5 },
   statusText: { fontSize: 14, fontWeight: '600' },
   rovingCard: {

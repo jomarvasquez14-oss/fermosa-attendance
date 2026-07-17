@@ -16,6 +16,7 @@ interface LeaveTypeRow {
   is_paid: boolean;
   default_days_per_year: number;
   is_active: boolean;
+  birthday_only: boolean;
 }
 
 const inputClass =
@@ -50,7 +51,7 @@ export function Settings() {
     });
     supabase.from('holidays').select('id, holiday_date, name, kind').order('holiday_date')
       .then(({ data }) => setHolidays((data as HolidayRow[]) ?? []));
-    supabase.from('leave_types').select('id, name, is_paid, default_days_per_year, is_active').order('name')
+    supabase.from('leave_types').select('id, name, is_paid, default_days_per_year, is_active, birthday_only').order('name')
       .then(({ data }) => setLeaveTypes((data as LeaveTypeRow[]) ?? []));
   }, []);
 
@@ -276,7 +277,14 @@ export function Settings() {
           <tbody className="divide-y divide-gray-100">
             {leaveTypes.map((t) => (
               <tr key={t.id} className={t.is_active ? 'hover:bg-gray-50' : 'bg-gray-50 text-gray-400'}>
-                <td className="px-4 py-2 font-medium text-gray-900">{t.name}</td>
+                <td className="px-4 py-2 font-medium text-gray-900">
+                  {t.name}
+                  {t.birthday_only && (
+                    <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                      🎂 birth month only
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-2">
                   <span className={t.is_paid
                     ? 'rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700'

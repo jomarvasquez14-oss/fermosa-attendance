@@ -85,6 +85,14 @@ const punchTimeFmt = new Intl.DateTimeFormat('en-PH', {
   minute: '2-digit',
   hour12: true,
 });
+const hireDateFmt = new Intl.DateTimeFormat('en-PH', {
+  timeZone: 'Asia/Manila',
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+// Manila calendar day as ISO 'YYYY-MM-DD' — used to compare against a birthday.
+const manilaYmdFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' });
 
 /** Rolling window (not the calendar day) so an overnight shift keeps its state across midnight. */
 function recentWindowStartIso(hours = 18): string {
@@ -119,6 +127,20 @@ export function TimeClock() {
 
   const isRoving = !!profile && profile.branch_id === null;
   const effectiveBranchId = profile?.branch_id ?? selectedBranchId;
+
+  // Birthday greeting — pops once per day when today (Manila) matches the birthday.
+  const [showBirthday, setShowBirthday] = useState(false);
+  useEffect(() => {
+    if (!profile?.birthday) return;
+    const todayYmd = manilaYmdFmt.format(new Date());
+    if (profile.birthday.slice(5) !== todayYmd.slice(5)) return; // compare MM-DD
+    if (localStorage.getItem(`fermosa.bday_seen.${profile.id}`) === todayYmd) return;
+    setShowBirthday(true);
+  }, [profile?.id, profile?.birthday]);
+  const dismissBirthday = () => {
+    if (profile) localStorage.setItem(`fermosa.bday_seen.${profile.id}`, manilaYmdFmt.format(new Date()));
+    setShowBirthday(false);
+  };
 
   // Live clock.
   useEffect(() => {
@@ -395,6 +417,9 @@ export function TimeClock() {
         <div className="text-5xl font-bold tabular-nums text-ink">{timeLabel}</div>
         <div className="mt-1 text-sm text-muted">{dateLabel}</div>
         <span className={`pill mt-4 ${STATUS_STYLE[workStatus]}`}>{STATUS_LABEL[workStatus]}</span>
+        {profile.date_hired && (
+          <p className="mt-3 text-xs text-muted">Hired {hireDateFmt.format(new Date(profile.date_hired))}</p>
+        )}
       </div>
 
       {isRoving && (
@@ -514,6 +539,24 @@ export function TimeClock() {
             </button>
             <button onClick={cancelLocation} className="btn mt-2 w-full">
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showBirthday && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-6">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center">
+            <div className="text-5xl">🎂</div>
+            <p className="mt-3 text-lg font-bold text-ink">
+              Happy Birthday, {profile.full_name.split(' ')[0]}! 🎉
+            </p>
+            <p className="mt-2 text-sm text-muted">
+              Wishing you a wonderful year ahead from the whole Fermosa team. Enjoy your day — don't
+              forget your birthday leave this month 🎁
+            </p>
+            <button onClick={dismissBirthday} className="btn-primary mt-4 w-full">
+              Thanks! 🎉
             </button>
           </div>
         </div>

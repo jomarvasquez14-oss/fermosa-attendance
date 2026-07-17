@@ -47,6 +47,8 @@ export function EmployeeForm() {
   const [positionId, setPositionId] = useState('');
   const [status, setStatus] = useState<EmploymentStatus>('active');
   const [phone, setPhone] = useState('');
+  const [dateHired, setDateHired] = useState('');
+  const [birthday, setBirthday] = useState('');
 
   const [pin, setPin] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -86,6 +88,8 @@ export function EmployeeForm() {
           setPositionId(p.position_id ?? '');
           setStatus(p.employment_status);
           setPhone(p.phone ?? '');
+          setDateHired(p.date_hired ?? '');
+          setBirthday(p.birthday ?? '');
         }
         setLoaded(true);
       });
@@ -170,6 +174,8 @@ export function EmployeeForm() {
         position_id: positionId || null,
         employment_status: status,
         phone: phone || null,
+        date_hired: dateHired || null,
+        birthday: birthday || null,
       });
       if (!res.ok) {
         setBusy(false);
@@ -198,6 +204,8 @@ export function EmployeeForm() {
           position_id: positionId || null,
           employment_status: status,
           phone: phone || null,
+          date_hired: dateHired || null,
+          birthday: birthday || null,
         })
         .eq('id', id);
       if (updErr) {
@@ -376,6 +384,15 @@ export function EmployeeForm() {
           <div>
             <label className={labelClass}>Phone</label>
             <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+63 9xx xxx xxxx" className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Date hired</label>
+            <input type="date" value={dateHired} onChange={(e) => setDateHired(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Birthday</label>
+            <input type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} className={inputClass} />
+            <p className="mt-1 text-xs text-gray-500">Used for the birthday greeting and the birth-month birthday leave.</p>
           </div>
         </div>
 

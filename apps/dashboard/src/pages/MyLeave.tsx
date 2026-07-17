@@ -8,6 +8,7 @@ interface TypeRow {
   id: string;
   name: string;
   is_paid: boolean;
+  birthday_only: boolean;
 }
 interface BalanceRow {
   leave_type_id: string;
@@ -63,7 +64,7 @@ export function MyLeave() {
   const load = useCallback(async () => {
     if (!profile) return;
     const [t, b, r] = await Promise.all([
-      supabase.from('leave_types').select('id, name, is_paid').eq('is_active', true).order('name'),
+      supabase.from('leave_types').select('id, name, is_paid, birthday_only').eq('is_active', true).order('name'),
       supabase
         .from('leave_balances_view')
         .select('leave_type_id, entitled_days, used_days, remaining_days')
@@ -105,13 +106,33 @@ export function MyLeave() {
     void load();
   }, [load]);
 
-  const endYmd = halfDay ? start : end;
+  const selectedType = types.find((t) => t.id === typeId) ?? null;
+  const isBirthdayType = selectedType?.birthday_only ?? false;
+  const birthMonth = profile?.birthday ? Number(profile.birthday.slice(5, 7)) : null; // 1–12
+  const birthMonthName = birthMonth
+    ? new Date(YEAR, birthMonth - 1, 1).toLocaleString('en-US', { month: 'long' })
+    : '';
+  const mm = birthMonth ? String(birthMonth).padStart(2, '0') : '01';
+  const birthMonthMin = `${YEAR}-${mm}-01`;
+  const birthMonthMax = birthMonth
+    ? `${YEAR}-${mm}-${String(new Date(YEAR, birthMonth, 0).getDate()).padStart(2, '0')}`
+    : `${YEAR}-01-31`;
+  const singleDay = halfDay || isBirthdayType; // birthday leave is one full day
+  const endYmd = singleDay ? start : end;
   const dayCount = useMemo(
     () => countLeaveDays(start, endYmd, workDays, holidays, halfDay),
     [start, endYmd, workDays, holidays, halfDay],
   );
-  const selectedType = types.find((t) => t.id === typeId) ?? null;
   const balanceForType = balances.find((b) => b.leave_type_id === typeId) ?? null;
+  const startInBirthMonth = !!birthMonth && start.slice(5, 7) === mm;
+  const birthdayBlocked = isBirthdayType && (!profile?.birthday || !startInBirthMonth);
+
+  // When Birthday Leave is picked, force a single day inside the birth month.
+  useEffect(() => {
+    if (!isBirthdayType || !birthMonth) return;
+    setHalfDay(false);
+    if (start.slice(5, 7) !== mm) setStart(birthMonthMin);
+  }, [isBirthdayType, birthMonth, mm, start, birthMonthMin]);
 
   const submit = async () => {
     if (!profile || !typeId) return;
@@ -119,6 +140,14 @@ export function MyLeave() {
     setMsg(null);
     if (endYmd < start) {
       setError('The end date is before the start date.');
+      return;
+    }
+    if (isBirthdayType && !profile.birthday) {
+      setError('Ask HR to add your birthday first.');
+      return;
+    }
+    if (isBirthdayType && !startInBirthMonth) {
+      setError(`Birthday leave can only be taken in your birth month (${birthMonthName}).`);
       return;
     }
     setBusy(true);
@@ -204,12 +233,24 @@ export function MyLeave() {
               </div>
             </div>
 
+            {isBirthdayType && (
+              <div className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {profile.birthday
+                  ? `🎂 Birthday leave — one paid day, any working day in your birth month (${birthMonthName}).`
+                  : '🎂 Birthday leave — ask HR to add your birthday to your profile first.'}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-ink">Start</label>
+                <label className="mb-1 block text-sm font-medium text-ink">
+                  {isBirthdayType ? 'Day' : 'Start'}
+                </label>
                 <input
                   type="date"
                   value={start}
+                  min={isBirthdayType ? birthMonthMin : undefined}
+                  max={isBirthdayType ? birthMonthMax : undefined}
                   onChange={(e) => {
                     setStart(e.target.value);
                     if (e.target.value > end) setEnd(e.target.value);
@@ -217,23 +258,27 @@ export function MyLeave() {
                   className="input"
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-ink">End</label>
-                <input
-                  type="date"
-                  value={endYmd}
-                  min={start}
-                  disabled={halfDay}
-                  onChange={(e) => setEnd(e.target.value)}
-                  className="input disabled:opacity-50"
-                />
-              </div>
+              {!isBirthdayType && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-ink">End</label>
+                  <input
+                    type="date"
+                    value={endYmd}
+                    min={start}
+                    disabled={singleDay}
+                    onChange={(e) => setEnd(e.target.value)}
+                    className="input disabled:opacity-50"
+                  />
+                </div>
+              )}
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" checked={halfDay} onChange={(e) => setHalfDay(e.target.checked)} />
-              Half day (0.5)
-            </label>
+            {!isBirthdayType && (
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <input type="checkbox" checked={halfDay} onChange={(e) => setHalfDay(e.target.checked)} />
+                Half day (0.5)
+              </label>
+            )}
 
             <div>
               <label className="mb-1 block text-sm font-medium text-ink">Reason (optional)</label>
@@ -266,7 +311,7 @@ export function MyLeave() {
 
             <button
               onClick={submit}
-              disabled={busy || !typeId || dayCount === 0}
+              disabled={busy || !typeId || dayCount === 0 || birthdayBlocked}
               className="btn-primary w-full disabled:opacity-50"
             >
               {busy ? 'Filing…' : 'File request'}

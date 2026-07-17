@@ -53,6 +53,7 @@ export interface LeaveType {
   is_paid: boolean;
   default_days_per_year: number;
   is_active: boolean;
+  birthday_only: boolean; // true = usable only within the employee's birth month (Birthday Leave)
 }
 
 export interface LeaveRequest {
@@ -192,6 +193,8 @@ export interface Profile {
   employment_status: EmploymentStatus;
   phone: string | null;
   photo_path: string | null;
+  date_hired: string | null; // 'YYYY-MM-DD'
+  birthday: string | null; // 'YYYY-MM-DD'
   created_at: string;
 }
 
@@ -226,6 +229,8 @@ export interface CreateEmployeeInput {
   position_id: string | null;
   employment_status: EmploymentStatus;
   phone: string | null;
+  date_hired?: string | null; // 'YYYY-MM-DD'
+  birthday?: string | null; // 'YYYY-MM-DD'
 }
 
 export type AdminUsersRequest =

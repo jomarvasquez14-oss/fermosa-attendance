@@ -125,6 +125,8 @@ Deno.serve(async (req) => {
       position_id: input?.position_id ?? null,
       employment_status: input?.employment_status ?? 'active',
       phone: input?.phone ?? null,
+      date_hired: input?.date_hired ?? null,
+      birthday: input?.birthday ?? null,
     });
 
     if (profileErr) {

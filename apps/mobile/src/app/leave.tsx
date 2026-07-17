@@ -22,6 +22,7 @@ interface TypeRow {
   id: string;
   name: string;
   is_paid: boolean;
+  birthday_only: boolean;
 }
 interface BalanceRow {
   leave_type_id: string;
@@ -74,7 +75,7 @@ export default function LeaveScreen() {
   const load = useCallback(async () => {
     if (!profile) return;
     const [t, b, r] = await Promise.all([
-      supabase.from('leave_types').select('id, name, is_paid').eq('is_active', true).order('name'),
+      supabase.from('leave_types').select('id, name, is_paid, birthday_only').eq('is_active', true).order('name'),
       supabase
         .from('leave_balances_view')
         .select('leave_type_id, entitled_days, used_days, remaining_days')
@@ -113,20 +114,45 @@ export default function LeaveScreen() {
     void load();
   }, [load]);
 
+  const selectedType = types.find((t) => t.id === typeId) ?? null;
+  const isBirthdayType = selectedType?.birthday_only ?? false;
+  const birthMonth = profile?.birthday ? Number(profile.birthday.slice(5, 7)) : null; // 1–12
+  const birthMonthName = birthMonth
+    ? new Date(YEAR, birthMonth - 1, 1).toLocaleString('en-US', { month: 'long' })
+    : '';
+  const singleDay = halfDay || isBirthdayType; // birthday leave is one full day
   const startYmd = ymd(start);
-  const endYmd = halfDay ? startYmd : ymd(end);
+  const endYmd = singleDay ? startYmd : ymd(end);
   const dayCount = useMemo(
     () => countLeaveDays(startYmd, endYmd, workDays, holidays, halfDay),
     [startYmd, endYmd, workDays, holidays, halfDay],
   );
-
-  const selectedType = types.find((t) => t.id === typeId) ?? null;
   const balanceForType = balances.find((b) => b.leave_type_id === typeId) ?? null;
+  const startInBirthMonth =
+    !!birthMonth && start.getMonth() + 1 === birthMonth && start.getFullYear() === YEAR;
+  const birthdayBlocked = isBirthdayType && (!profile?.birthday || !startInBirthMonth);
+
+  // When Birthday Leave is picked, snap to a single day inside the birth month.
+  useEffect(() => {
+    if (!isBirthdayType || !birthMonth) return;
+    setHalfDay(false);
+    if (start.getMonth() + 1 !== birthMonth || start.getFullYear() !== YEAR) {
+      setStart(new Date(YEAR, birthMonth - 1, 1));
+    }
+  }, [isBirthdayType, birthMonth, start]);
 
   const submit = async () => {
     if (!profile || !typeId) return;
     if (endYmd < startYmd) {
       Alert.alert('Invalid dates', 'The end date is before the start date.');
+      return;
+    }
+    if (isBirthdayType && !profile.birthday) {
+      Alert.alert('Birthday needed', 'Ask HR to add your birthday first.');
+      return;
+    }
+    if (isBirthdayType && !startInBirthMonth) {
+      Alert.alert('Birth month only', `Birthday leave can only be taken in your birth month (${birthMonthName}).`);
       return;
     }
     setBusy(true);
@@ -223,29 +249,43 @@ export default function LeaveScreen() {
             ))}
           </View>
 
+          {isBirthdayType && (
+            <View style={styles.birthdayHint}>
+              <Text style={styles.birthdayHintText}>
+                {profile?.birthday
+                  ? `🎂 Birthday leave — one paid day, any working day in your birth month (${birthMonthName}).`
+                  : '🎂 Birthday leave — ask HR to add your birthday to your profile first.'}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.dateRow}>
             <View style={styles.dateCol}>
-              <Text style={styles.label}>Start</Text>
+              <Text style={styles.label}>{isBirthdayType ? 'Day' : 'Start'}</Text>
               <Pressable style={styles.dateBtn} onPress={() => setShowStart(true)}>
                 <Text style={styles.dateText}>{startYmd}</Text>
               </Pressable>
             </View>
-            <View style={styles.dateCol}>
-              <Text style={styles.label}>End</Text>
-              <Pressable
-                style={[styles.dateBtn, halfDay && styles.dateBtnDisabled]}
-                disabled={halfDay}
-                onPress={() => setShowEnd(true)}
-              >
-                <Text style={[styles.dateText, halfDay && styles.muted]}>{endYmd}</Text>
-              </Pressable>
-            </View>
+            {!isBirthdayType && (
+              <View style={styles.dateCol}>
+                <Text style={styles.label}>End</Text>
+                <Pressable
+                  style={[styles.dateBtn, singleDay && styles.dateBtnDisabled]}
+                  disabled={singleDay}
+                  onPress={() => setShowEnd(true)}
+                >
+                  <Text style={[styles.dateText, singleDay && styles.muted]}>{endYmd}</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
 
-          <View style={styles.switchRow}>
-            <Text style={styles.label}>Half day (0.5)</Text>
-            <Switch value={halfDay} onValueChange={setHalfDay} />
-          </View>
+          {!isBirthdayType && (
+            <View style={styles.switchRow}>
+              <Text style={styles.label}>Half day (0.5)</Text>
+              <Switch value={halfDay} onValueChange={setHalfDay} />
+            </View>
+          )}
 
           <Text style={styles.label}>Reason (optional)</Text>
           <TextInput
@@ -272,8 +312,11 @@ export default function LeaveScreen() {
           </View>
 
           <Pressable
-            style={[styles.submit, (busy || !typeId || dayCount === 0) && styles.submitDisabled]}
-            disabled={busy || !typeId || dayCount === 0}
+            style={[
+              styles.submit,
+              (busy || !typeId || dayCount === 0 || birthdayBlocked) && styles.submitDisabled,
+            ]}
+            disabled={busy || !typeId || dayCount === 0 || birthdayBlocked}
             onPress={submit}
           >
             <Text style={styles.submitText}>{busy ? 'Filing…' : 'File request'}</Text>
@@ -316,6 +359,8 @@ export default function LeaveScreen() {
         <DateTimePicker
           value={start}
           mode="date"
+          minimumDate={isBirthdayType && birthMonth ? new Date(YEAR, birthMonth - 1, 1) : undefined}
+          maximumDate={isBirthdayType && birthMonth ? new Date(YEAR, birthMonth, 0) : undefined}
           onChange={(_e, d) => {
             setShowStart(Platform.OS === 'ios');
             if (d) {
@@ -389,6 +434,8 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#F5C518', borderColor: '#F5C518' },
   chipText: { fontSize: 13, color: '#374151' },
   chipTextActive: { color: '#3A2D06', fontWeight: '700' },
+  birthdayHint: { backgroundColor: '#fffbeb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginTop: 4 },
+  birthdayHintText: { fontSize: 13, color: '#92400e' },
   dateRow: { flexDirection: 'row', gap: 12 },
   dateCol: { flex: 1 },
   dateBtn: {

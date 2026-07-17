@@ -6,7 +6,7 @@ import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 
 export const STATUS_LABELS: Record<EmploymentStatus, string> = {
-  active: 'Active',
+  active: 'Regular Employee',
   probationary: 'Probationary',
   on_leave: 'On Leave',
   resigned: 'Resigned',
