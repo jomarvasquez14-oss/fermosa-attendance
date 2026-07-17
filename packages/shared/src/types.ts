@@ -103,8 +103,9 @@ export interface PayrollSummaryRow {
   rest_days_worked: number;
   holidays_worked: number;
   full_days: number; // days present that were NOT half-day-late (allowance = full_days × daily_allowance)
-  monthly_rate: number | null; // null: no compensation set, or the caller may not see it
+  daily_rate: number | null; // null: no compensation set, or the caller may not see it
   daily_allowance: number | null;
+  late_charge: number | null; // (late + undertime minutes) × daily_rate/480, all days
 }
 
 /** Status of a payroll → Google Sheets push. */

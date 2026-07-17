@@ -54,7 +54,7 @@ export function EmployeeForm() {
 
   // Compensation — HR/admins only; the table's RLS blocks everyone else anyway.
   const isAdmin = me ? COMPANY_WIDE_ROLES.includes(me.role) : false;
-  const [monthlyRate, setMonthlyRate] = useState('');
+  const [dailyRate, setDailyRate] = useState('');
   const [dailyAllowance, setDailyAllowance] = useState('');
   const [compExists, setCompExists] = useState(false);
 
@@ -98,12 +98,12 @@ export function EmployeeForm() {
     if (!id || !isAdmin) return;
     supabase
       .from('employee_compensation')
-      .select('monthly_rate, daily_allowance')
+      .select('daily_rate, daily_allowance')
       .eq('employee_id', id)
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
-          setMonthlyRate(String(data.monthly_rate));
+          setDailyRate(String(data.daily_rate));
           setDailyAllowance(String(data.daily_allowance));
           setCompExists(true);
         }
@@ -113,10 +113,10 @@ export function EmployeeForm() {
   /** Upsert the pay row; returns an error message or null. Skips when nothing was entered. */
   const saveCompensation = async (employeeId: string): Promise<string | null> => {
     if (!isAdmin) return null;
-    if (!compExists && monthlyRate === '' && dailyAllowance === '') return null;
+    if (!compExists && dailyRate === '' && dailyAllowance === '') return null;
     const { error: compErr } = await supabase.from('employee_compensation').upsert({
       employee_id: employeeId,
-      monthly_rate: Number(monthlyRate) || 0,
+      daily_rate: Number(dailyRate) || 0,
       daily_allowance: Number(dailyAllowance) || 0,
     });
     if (!compErr) setCompExists(true);
@@ -384,19 +384,20 @@ export function EmployeeForm() {
             <h3 className="text-sm font-semibold text-gray-900">Compensation</h3>
             <p className="mt-1 text-xs text-gray-500">
               Visible to HR and admins only. The allowance is paid per <strong>full</strong> day
-              present — a half-day (late past the half-day mark) earns no allowance.
+              present — a half-day (late past the half-day mark) earns no allowance. Late and
+              undertime are charged at daily rate ÷ 8 ÷ 60 per minute (₱600/day = ₱1.25/min).
             </p>
             <div className="mt-3 grid grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Monthly salary rate (₱)</label>
+                <label className={labelClass}>Daily salary rate (₱)</label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   inputMode="decimal"
-                  value={monthlyRate}
-                  onChange={(e) => setMonthlyRate(e.target.value)}
-                  placeholder="0.00"
+                  value={dailyRate}
+                  onChange={(e) => setDailyRate(e.target.value)}
+                  placeholder="600.00"
                   className={inputClass}
                 />
               </div>

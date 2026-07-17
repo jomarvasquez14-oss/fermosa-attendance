@@ -48,7 +48,7 @@ function mfaSatisfied(caller: { factors?: { status?: string }[] } | null, authHe
 const HEADERS = [
   'Employee code', 'Name', 'Branch', 'Days present', 'Full days', 'Days absent', 'Worked hours',
   'Late (min)', 'Undertime (min)', 'OT (min)', 'Paid leave', 'Unpaid leave',
-  'Rest-days worked', 'Holidays worked', 'Monthly rate', 'Allowance/full day',
+  'Rest-days worked', 'Holidays worked', 'Daily rate', 'Allowance/full day', 'Late charge',
 ];
 
 interface PayrollRow {
@@ -66,8 +66,9 @@ interface PayrollRow {
   unpaid_leave_days: number;
   rest_days_worked: number;
   holidays_worked: number;
-  monthly_rate: number | null;
+  daily_rate: number | null;
   daily_allowance: number | null;
+  late_charge: number | null;
 }
 
 function toValues(rows: PayrollRow[]): (string | number)[][] {
@@ -75,7 +76,7 @@ function toValues(rows: PayrollRow[]): (string | number)[][] {
     r.employee_code, r.full_name, r.branch_name, r.days_present, r.full_days, r.days_absent,
     Number((r.worked_minutes / 60).toFixed(2)), r.late_minutes, r.undertime_minutes,
     r.overtime_minutes, r.paid_leave_days, r.unpaid_leave_days, r.rest_days_worked, r.holidays_worked,
-    r.monthly_rate ?? '', r.daily_allowance ?? '',
+    r.daily_rate ?? '', r.daily_allowance ?? '', r.late_charge ?? '',
   ]);
   return [HEADERS, ...body];
 }
