@@ -166,7 +166,18 @@ function DayDetail({ record }: { record: RecordRow }) {
               {e.type === 'clock_in' || e.type === 'clock_out' ? 'No selfie ⚠️' : 'No selfie needed'}
             </div>
           )}
-          <p className="mt-2 text-xs font-semibold text-gray-900">{PUNCH_LABELS[e.type]}</p>
+          <p
+            className={`mt-2 text-xs font-semibold ${
+              e.type === 'clock_in'
+                ? 'text-green-700'
+                : e.type === 'clock_out'
+                  ? 'text-red-700'
+                  : 'text-amber-700'
+            }`}
+          >
+            {e.type === 'clock_in' ? '→ ' : e.type === 'clock_out' ? '← ' : ''}
+            {PUNCH_LABELS[e.type]}
+          </p>
           <p className="text-xs text-gray-500">
             {timeFmt.format(new Date(e.happened_at))}
             {manilaDateFmt.format(new Date(e.happened_at)) !== record.work_date && (

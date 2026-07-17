@@ -47,6 +47,21 @@ const timeFmt = new Intl.DateTimeFormat('en-PH', {
 
 const SOURCE_ICON: Record<PunchSource, string> = { mobile: '📱', web: '💻', kiosk: '🖥️' };
 
+// In/out must read at a glance for HR: green arrow-in pill vs red arrow-out pill
+// (the emoji next to it is the punch SOURCE — phone/laptop/kiosk — not direction).
+const TYPE_BADGE: Record<PunchType, string> = {
+  clock_in: 'bg-green-100 text-green-700',
+  break_start: 'bg-amber-100 text-amber-700',
+  break_end: 'bg-amber-100 text-amber-700',
+  clock_out: 'bg-red-100 text-red-700',
+};
+const TYPE_ARROW: Record<PunchType, string> = {
+  clock_in: '→',
+  break_start: '⏸',
+  break_end: '▶',
+  clock_out: '←',
+};
+
 const STATUS_BADGE: Record<AttendanceStatus, string> = {
   pending_review: 'bg-amber-100 text-amber-700',
   approved: 'bg-green-100 text-green-700',
@@ -358,7 +373,12 @@ export function Punches() {
                   <span className="text-xs text-gray-500">{e.employee?.employee_code}</span>
                 </td>
                 <td className="px-4 py-2 text-gray-700">
-                  {SOURCE_ICON[e.source]} {PUNCH_LABELS[e.type]}
+                  <span className="mr-1">{SOURCE_ICON[e.source]}</span>
+                  <span
+                    className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${TYPE_BADGE[e.type]}`}
+                  >
+                    {TYPE_ARROW[e.type]} {PUNCH_LABELS[e.type]}
+                  </span>
                 </td>
                 <td className="px-4 py-2 text-gray-600">{e.branch?.name ?? '—'}</td>
                 <td className="px-4 py-2">{fenceBadge(e)}</td>
