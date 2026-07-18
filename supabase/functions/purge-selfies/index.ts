@@ -1,9 +1,9 @@
-// purge-selfies — storage retention: delete attendance selfies older than 30 days.
+// purge-selfies — storage retention: delete attendance selfies older than 7 days.
 //
-// Selfies are proof for HR review + payroll, which finish well inside a
-// semi-monthly period. After 30 days they are no longer needed, so this job
-// removes them from the private `selfies` bucket to cap storage growth
-// (~100 staff × 2 selfies/day × ~60 KB × 30 days ≈ 360 MB steady-state).
+// Selfies are proof for HR review, which happens within a day or two. After 7
+// days they are no longer needed, so this job removes them from the private
+// `selfies` bucket to cap storage growth
+// (~100 staff × 2 selfies/day × ~60 KB × 7 days ≈ 84 MB steady-state).
 //
 // Called daily by pg_cron (see the selfie-retention migration). It is NOT a
 // user endpoint: it authorises with a shared PURGE_SECRET header so only the
@@ -11,7 +11,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-const RETENTION_DAYS = 30;
+const RETENTION_DAYS = 7;
 const BATCH = 500; // rows per pass
 const MAX_BATCHES = 20; // cap per run so a backlog can't time the function out
 

@@ -85,7 +85,7 @@ npx supabase@latest functions deploy payroll-sync   --project-ref <PROD_REF>
 npx supabase@latest functions deploy purge-selfies  --project-ref <PROD_REF>
 ```
 
-**Selfie retention (30-day auto-delete).** The `selfie_retention` migration
+**Selfie retention (7-day auto-delete).** The `selfie_retention` migration
 schedules a daily pg_cron job that calls `purge-selfies`. Wire its secret (once):
 
 ```bash
@@ -97,7 +97,7 @@ select vault.create_secret('https://<PROD_REF>.supabase.co/functions/v1/purge-se
 select vault.create_secret('<same-random-strong-secret>', 'purge_selfies_secret');
 ```
 Until these are set the job no-ops safely. Selfies are already compressed to
-~40–80 KB on capture; with 30-day purge, storage stays ≈ 360 MB for 100 staff.
+~40–80 KB on capture; with 7-day purge, storage stays ≈ 84 MB for 100 staff.
 
 For payroll → Sheets, set the Google secrets per
 [SETUP-GOOGLE-SHEETS.md](SETUP-GOOGLE-SHEETS.md) (otherwise payroll-sync stays in
