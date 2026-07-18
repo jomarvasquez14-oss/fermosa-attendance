@@ -40,6 +40,8 @@ interface BranchInfo {
   shift_end: string;
   shift2_start: string | null;
   shift2_end: string | null;
+  shift3_start: string | null;
+  shift3_end: string | null;
 }
 
 const STATUS_STYLE = {
@@ -291,20 +293,20 @@ export function TimeClock() {
     if (!navigator.onLine) return;
     supabase
       .from('branches')
-      .select('id, name, lat, lng, geofence_radius_m, shift_start, shift_end, shift2_start, shift2_end')
+      .select('id, name, lat, lng, geofence_radius_m, shift_start, shift_end, shift2_start, shift2_end, shift3_start, shift3_end')
       .eq('id', effectiveBranchId)
       .maybeSingle()
       .then(({ data }) => setBranch((data as BranchInfo | null) ?? null));
   }, [effectiveBranchId]);
 
-  // Two shifts per branch: the employee picks which shift they're timing in for,
-  // remembered per day so time-out doesn't re-ask.
+  // Multi-shift branch (2 or 3 shifts): the employee picks which shift they're
+  // timing in for, remembered per day so time-out doesn't re-ask.
   const shiftOptions = branch ? branchShifts(branch) : [];
-  const branchHasTwoShifts = shiftOptions.length > 1;
+  const branchHasMultipleShifts = shiftOptions.length > 1;
   const manilaToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(now);
   const shiftKey = profile ? `fermosa.shift.${profile.id}.${manilaToday}` : null;
   useEffect(() => {
-    if (!branchHasTwoShifts || !shiftKey) {
+    if (!branchHasMultipleShifts || !shiftKey) {
       setSelectedShift(null);
       return;
     }
@@ -315,7 +317,7 @@ export function TimeClock() {
     } catch {
       /* ignore */
     }
-  }, [branchHasTwoShifts, shiftKey]);
+  }, [branchHasMultipleShifts, shiftKey]);
   const pickShift = (opt: { start: string; end: string }) => {
     setSelectedShift(opt);
     if (shiftKey) localStorage.setItem(shiftKey, JSON.stringify(opt));
@@ -339,9 +341,11 @@ export function TimeClock() {
         setError('Pick the branch you are working at first.');
         return;
       }
-      const twoShifts = !!branch?.shift2_start;
-      const shift = twoShifts ? selectedShift : null;
-      if (twoShifts && !shift) {
+      // A branch with a Shift 2 (and optionally Shift 3) runs multiple shifts —
+      // the employee must pick which one they're timing in for.
+      const multiShift = !!branch?.shift2_start;
+      const shift = multiShift ? selectedShift : null;
+      if (multiShift && !shift) {
         setError('Pick which shift you are timing in for first.');
         return;
       }
@@ -489,7 +493,7 @@ export function TimeClock() {
         </div>
       )}
 
-      {branchHasTwoShifts && (
+      {branchHasMultipleShifts && (
         <div className="card mt-4 px-4 py-4">
           <span className="block text-xs font-medium text-gray-500">
             Which shift are you timing in for today?
@@ -525,7 +529,7 @@ export function TimeClock() {
           <button
             key={type}
             onClick={() => onAction(type)}
-            disabled={busy || (isRoving && !selectedBranchId) || (branchHasTwoShifts && !selectedShift)}
+            disabled={busy || (isRoving && !selectedBranchId) || (branchHasMultipleShifts && !selectedShift)}
             className={`rounded-2xl py-5 text-lg font-bold text-white transition disabled:opacity-50 ${
               type === 'clock_in'
                 ? 'bg-green-600 hover:bg-green-700'

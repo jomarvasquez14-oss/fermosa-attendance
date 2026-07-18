@@ -27,6 +27,8 @@ const emptyForm = {
   shift_end: '19:00',
   shift2_start: '', // blank = single-shift branch
   shift2_end: '',
+  shift3_start: '', // blank = no 3rd shift (requires Shift 2)
+  shift3_end: '',
   work_days: [1, 2, 3, 4, 5, 6] as number[],
 };
 
@@ -68,6 +70,8 @@ export function Branches() {
       shift_end: b.shift_end.slice(0, 5),
       shift2_start: b.shift2_start?.slice(0, 5) ?? '',
       shift2_end: b.shift2_end?.slice(0, 5) ?? '',
+      shift3_start: b.shift3_start?.slice(0, 5) ?? '',
+      shift3_end: b.shift3_end?.slice(0, 5) ?? '',
       work_days: b.work_days ?? [1, 2, 3, 4, 5, 6],
     });
     setError(null);
@@ -126,6 +130,8 @@ export function Branches() {
       shift_end: form.shift_end,
       shift2_start: form.shift2_start || null,
       shift2_end: form.shift2_end || null,
+      shift3_start: form.shift3_start || null,
+      shift3_end: form.shift3_end || null,
       work_days: form.work_days,
     };
     if (form.work_days.length === 0) {
@@ -145,6 +151,21 @@ export function Branches() {
     }
     if (form.shift2_start && form.shift2_start === form.shift2_end) {
       setError('Shift 2 start and end cannot be the same.');
+      setBusy(false);
+      return;
+    }
+    if (Boolean(form.shift3_start) !== Boolean(form.shift3_end)) {
+      setError('Shift 3 needs both a start and an end — or leave both blank.');
+      setBusy(false);
+      return;
+    }
+    if (form.shift3_start && !form.shift2_start) {
+      setError('Set Shift 2 before adding Shift 3 (opening / mid / closing fill in order).');
+      setBusy(false);
+      return;
+    }
+    if (form.shift3_start && form.shift3_start === form.shift3_end) {
+      setError('Shift 3 start and end cannot be the same.');
       setBusy(false);
       return;
     }
@@ -237,7 +258,20 @@ export function Branches() {
               <input type="time" value={form.shift2_end} onChange={(e) => setForm({ ...form, shift2_end: e.target.value })} className={inputClass} />
               <p className="mt-1 text-xs text-gray-500">
                 Set a 2nd shift for a two-shift branch — staff pick which shift they're timing in for, and late
-                is measured against it. Leave blank for a single-shift branch.
+                is measured against it. Leave blank for a single-shift branch. Add a 3rd shift below for
+                branches with opening / mid / closing shifts.
+              </p>
+            </div>
+            <div>
+              <label className={labelClass}>Shift 3 start (optional)</label>
+              <input type="time" value={form.shift3_start} onChange={(e) => setForm({ ...form, shift3_start: e.target.value })} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Shift 3 end (optional)</label>
+              <input type="time" value={form.shift3_end} onChange={(e) => setForm({ ...form, shift3_end: e.target.value })} className={inputClass} />
+              <p className="mt-1 text-xs text-gray-500">
+                Add a 3rd shift (e.g. closing) for a three-shift branch. Requires Shift 2. Leave blank if the
+                branch has only one or two shifts.
               </p>
             </div>
           </div>
@@ -358,7 +392,8 @@ export function Branches() {
                 </td>
                 <td className="px-4 py-2 text-xs text-gray-600">
                   {formatShift(b.shift_start, b.shift_end)}
-                  {b.shift2_start && b.shift2_end && ` + ${formatShift(b.shift2_start, b.shift2_end)}`} ·{' '}
+                  {b.shift2_start && b.shift2_end && ` + ${formatShift(b.shift2_start, b.shift2_end)}`}
+                  {b.shift3_start && b.shift3_end && ` + ${formatShift(b.shift3_start, b.shift3_end)}`} ·{' '}
                   {(b.work_days ?? []).map((d) => DAY_LABELS[d - 1]).join(' ')}
                 </td>
                 <td className="px-4 py-2 text-gray-600">{b.geofence_radius_m} m</td>

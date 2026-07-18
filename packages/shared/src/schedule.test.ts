@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  branchShifts,
   formatShift,
   isOvernight,
   punchWindowForWorkDate,
@@ -58,5 +59,41 @@ describe('formatShift', () => {
     expect(formatShift('09:00', '18:00')).toBe('9:00 AM – 6:00 PM');
     expect(formatShift('22:00', '06:00')).toBe('10:00 PM – 6:00 AM +1');
     expect(formatShift('00:00', '12:00')).toBe('12:00 AM – 12:00 PM');
+  });
+});
+
+describe('branchShifts', () => {
+  it('single-shift branch returns one option', () => {
+    const out = branchShifts({ shift_start: '10:00', shift_end: '19:00', shift2_start: null, shift2_end: null });
+    expect(out).toHaveLength(1);
+    expect(out[0]!.label).toBe('10:00 AM – 7:00 PM');
+  });
+
+  it('two-shift branch returns two options in order', () => {
+    const out = branchShifts({
+      shift_start: '09:00', shift_end: '18:00',
+      shift2_start: '12:00', shift2_end: '21:00',
+    });
+    expect(out.map((o) => o.start)).toEqual(['09:00', '12:00']);
+  });
+
+  it('three-shift branch (opening / mid / closing) returns three options in order', () => {
+    const out = branchShifts({
+      shift_start: '08:00', shift_end: '17:00',
+      shift2_start: '12:00', shift2_end: '21:00',
+      shift3_start: '14:00', shift3_end: '23:00',
+    });
+    expect(out).toHaveLength(3);
+    expect(out.map((o) => o.start)).toEqual(['08:00', '12:00', '14:00']);
+    expect(out[2]!.label).toBe('2:00 PM – 11:00 PM');
+  });
+
+  it('ignores Shift 3 when only one of its ends is set', () => {
+    const out = branchShifts({
+      shift_start: '08:00', shift_end: '17:00',
+      shift2_start: '12:00', shift2_end: '21:00',
+      shift3_start: '14:00', shift3_end: null,
+    });
+    expect(out).toHaveLength(2);
   });
 });

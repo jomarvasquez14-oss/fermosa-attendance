@@ -68,20 +68,26 @@ export interface ShiftOption {
 }
 
 /**
- * The 1–2 selectable shifts for a branch. Shift 2 is included only when the
- * branch defines it — that's the signal to show a shift picker at time-in.
+ * The 1–3 selectable shifts for a branch. Shifts 2 and 3 are included only when
+ * the branch defines them — more than one option is the signal to show a shift
+ * picker at time-in. Shift 3 requires Shift 2 (e.g. opening / mid / closing).
  */
 export function branchShifts(b: {
   shift_start: string;
   shift_end: string;
   shift2_start?: string | null;
   shift2_end?: string | null;
+  shift3_start?: string | null;
+  shift3_end?: string | null;
 }): ShiftOption[] {
   const out: ShiftOption[] = [
     { start: b.shift_start, end: b.shift_end, label: formatShift(b.shift_start, b.shift_end) },
   ];
   if (b.shift2_start && b.shift2_end) {
     out.push({ start: b.shift2_start, end: b.shift2_end, label: formatShift(b.shift2_start, b.shift2_end) });
+  }
+  if (b.shift3_start && b.shift3_end) {
+    out.push({ start: b.shift3_start, end: b.shift3_end, label: formatShift(b.shift3_start, b.shift3_end) });
   }
   return out;
 }

@@ -168,6 +168,10 @@ export interface Branch {
    *  which one they are timing in for. Null = single-shift branch. */
   shift2_start: string | null;
   shift2_end: string | null;
+  /** Optional Shift 3 (e.g. opening / mid / closing). Requires Shift 2.
+   *  Null = branch has no 3rd shift. */
+  shift3_start: string | null;
+  shift3_end: string | null;
   work_days: number[]; // ISO weekday numbers, 1 = Monday … 7 = Sunday
 }
 
