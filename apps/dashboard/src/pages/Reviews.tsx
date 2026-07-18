@@ -609,7 +609,7 @@ export function Reviews() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-6xl">
       <div>
         <h2 className="text-lg font-semibold text-ink">Attendance reviews</h2>
         <p className="text-sm text-gray-500">
@@ -695,8 +695,8 @@ export function Reviews() {
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
-      <div className="mt-4 overflow-hidden card">
-        <table className="w-full text-left text-sm">
+      <div className="mt-4 overflow-x-auto card">
+        <table className="min-w-full text-left text-sm">
           <thead className="bg-ground text-muted">
             <tr>
               <th className="px-4 py-2 font-medium">Date</th>
@@ -775,7 +775,8 @@ export function Reviews() {
                       {STATUS_LABEL[r.status]}
                     </span>
                   </td>
-                  <td className="space-x-2 whitespace-nowrap px-4 py-2 text-right">
+                  <td className="px-4 py-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                     <button
                       onClick={() => setOpenId(openId === r.id ? null : r.id)}
                       className="text-sm text-brand-700 hover:underline"
@@ -812,6 +813,7 @@ export function Reviews() {
                         {correctId === r.id ? 'Close' : 'Correct'}
                       </button>
                     )}
+                    </div>
                   </td>
                 </tr>
                 {correctId === r.id && (
