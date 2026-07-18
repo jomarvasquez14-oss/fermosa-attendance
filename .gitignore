@@ -36,3 +36,6 @@ npm-debug.log*
 
 # Database backups — real staff PII + salaries, never commit
 backups/
+
+# Local backup output (real staff PII + salaries)
+backup-out/

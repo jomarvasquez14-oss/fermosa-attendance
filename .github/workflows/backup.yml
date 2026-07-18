@@ -1,0 +1,60 @@
+name: Database backup
+
+# Daily automated snapshot of the production database to the private Supabase
+# Storage "backups" bucket, plus an off-Supabase copy kept as a workflow
+# artifact. Also runnable on demand (the "Run workflow" button) — use that
+# before every payroll cutoff for a fresh snapshot.
+#
+# Requires two repo secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL
+#   SUPABASE_SERVICE_ROLE_KEY
+# The workflow errors harmlessly until those are set. See docs/BACKUP-RESTORE.md.
+
+on:
+  schedule:
+    - cron: '30 18 * * *' # 02:30 Asia/Manila (UTC+8), after the nightly sweep
+  workflow_dispatch:
+    inputs:
+      label:
+        description: 'Business label / folder (default: fermosa)'
+        required: false
+        default: 'fermosa'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install backup dependency
+        run: npm i @supabase/supabase-js@2 --no-save
+
+      - name: Run backup
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKUP_LABEL: ${{ github.event.inputs.label || 'fermosa' }}
+          # Scheduled runs are "daily" (one file per day, overwritten); manual
+          # runs are timestamped so a pre-payroll backup never clobbers the daily.
+          BACKUP_KIND: ${{ github.event_name == 'workflow_dispatch' && 'manual' || 'daily' }}
+          BACKUP_OUT_DIR: backup-out
+        run: node scripts/backup/backup.mjs
+
+      - name: Keep an off-Supabase copy (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: backup-out/
+          retention-days: 90
+          if-no-files-found: error
