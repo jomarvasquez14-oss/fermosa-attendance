@@ -1,9 +1,9 @@
 name: Database backup
 
-# Daily automated snapshot of the production database to the private Supabase
-# Storage "backups" bucket, plus an off-Supabase copy kept as a workflow
-# artifact. Also runnable on demand (the "Run workflow" button) — use that
-# before every payroll cutoff for a fresh snapshot.
+# Twice-daily automated snapshot of the production database to the private
+# Supabase Storage "backups" bucket, plus an off-Supabase copy kept as a
+# workflow artifact. Also runnable on demand (the "Run workflow" button) — use
+# that before every payroll cutoff for a fresh snapshot.
 #
 # Requires two repo secrets (Settings → Secrets and variables → Actions):
 #   SUPABASE_URL
@@ -12,7 +12,8 @@ name: Database backup
 
 on:
   schedule:
-    - cron: '30 18 * * *' # 02:30 Asia/Manila (UTC+8), after the nightly sweep
+    - cron: '0 4 * * *' # 12:00 noon Asia/Manila (UTC+8)  -> the "noon" snapshot
+    - cron: '0 15 * * *' # 11:00 PM Asia/Manila (UTC+8)    -> the "night" snapshot
   workflow_dispatch:
     inputs:
       label:
@@ -47,9 +48,12 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           BACKUP_LABEL: ${{ github.event.inputs.label || 'fermosa' }}
-          # Scheduled runs are "daily" (one file per day, overwritten); manual
-          # runs are timestamped so a pre-payroll backup never clobbers the daily.
+          # Scheduled runs are "daily"; manual runs are timestamped so a
+          # pre-payroll backup never clobbers a scheduled one.
           BACKUP_KIND: ${{ github.event_name == 'workflow_dispatch' && 'manual' || 'daily' }}
+          # Which of the two daily snapshots this is (kept as separate files so
+          # both recovery points survive). Ignored for manual runs.
+          BACKUP_SLOT: ${{ github.event.schedule == '0 15 * * *' && 'night' || 'noon' }}
           BACKUP_OUT_DIR: backup-out
         run: node scripts/backup/backup.mjs
 

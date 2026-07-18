@@ -15,7 +15,8 @@
 //   BACKUP_LABEL   business slug / folder name        (default 'fermosa')
 //   BACKUP_BUCKET  private storage bucket              (default 'backups')
 //   BACKUP_KIND    'daily' | 'manual'                  (default 'daily')
-//   RETENTION_DAYS keep this many days of dailies      (default 90)
+//   BACKUP_SLOT    'noon' | 'night' | ''  (daily runs) (default '')
+//   RETENTION_DAYS keep this many days of snapshots     (default 90)
 //   BACKUP_OUT_DIR local dir for the artifact copy     (default 'backup-out')
 import { createClient } from '@supabase/supabase-js';
 import { mkdirSync, writeFileSync, statSync } from 'node:fs';
@@ -27,6 +28,7 @@ const SERVICE_KEY = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
 const LABEL = (process.env.BACKUP_LABEL || 'fermosa').trim();
 const BUCKET = (process.env.BACKUP_BUCKET || 'backups').trim();
 const KIND = process.env.BACKUP_KIND === 'manual' ? 'manual' : 'daily';
+const SLOT = (process.env.BACKUP_SLOT || '').trim();
 const RETENTION_DAYS = Number(process.env.RETENTION_DAYS || 90);
 const OUT_DIR = process.env.BACKUP_OUT_DIR || 'backup-out';
 
@@ -84,14 +86,19 @@ async function dumpAuthUsers() {
   return users;
 }
 
-// Delete daily snapshots older than RETENTION_DAYS (manual-* files are kept).
+// Delete snapshots older than RETENTION_DAYS. Matches every naming pattern
+// (YYYY-MM-DD.json, YYYY-MM-DD-noon/night.json, manual-YYYY-MM-DD...json) by the
+// date embedded in the filename.
 async function prune() {
   const { data, error } = await db.storage.from(BUCKET).list(LABEL, { limit: 1000 });
   if (error) return; // non-fatal — never fail a backup over cleanup
   const cutoff = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
   const stale = (data ?? [])
     .map((o) => o.name)
-    .filter((n) => /^\d{4}-\d{2}-\d{2}\.json$/.test(n) && Date.parse(n.slice(0, 10)) < cutoff)
+    .filter((n) => {
+      const m = n.match(/(\d{4}-\d{2}-\d{2})/);
+      return m && Date.parse(m[1]) < cutoff;
+    })
     .map((n) => `${LABEL}/${n}`);
   if (stale.length) await db.storage.from(BUCKET).remove(stale);
 }
@@ -120,12 +127,20 @@ async function main() {
   const now = new Date();
   const day = now.toISOString().slice(0, 10); // YYYY-MM-DD
   const min = now.toISOString().slice(0, 16).replace(/[:]/g, '-'); // YYYY-MM-DDTHH-MM
-  const objectName = KIND === 'manual' ? `${LABEL}/manual-${min}.json` : `${LABEL}/${day}.json`;
+  // manual -> timestamped; daily with a slot (noon/night) -> one file per slot,
+  // so both daily snapshots are kept; daily without a slot -> one file per day.
+  const objectName =
+    KIND === 'manual'
+      ? `${LABEL}/manual-${min}.json`
+      : SLOT
+        ? `${LABEL}/${day}-${SLOT}.json`
+        : `${LABEL}/${day}.json`;
 
   snapshot._meta = {
     taken_at: now.toISOString(),
     label: LABEL,
     kind: KIND,
+    slot: SLOT || null,
     project_url: URL,
     object: `${BUCKET}/${objectName}`,
     note: 'data-only snapshot; schema is in git (supabase/migrations); passwords + selfies not included',

@@ -10,10 +10,12 @@ independent copy kept on GitHub.
   roster to one JSON snapshot and uploads it to the private **`backups`** bucket
   at `‹label›/‹date›.json`. It creates the bucket on first run and prunes daily
   snapshots older than `RETENTION_DAYS` (default 90).
-- **`.github/workflows/backup.yml`** runs it **daily at 02:30 Manila** and on the
-  **"Run workflow"** button (a fresh, timestamped snapshot — use it before every
-  payroll cutoff). Each run also uploads the snapshot as a GitHub **artifact**
-  (90-day retention) — a copy that lives off Supabase.
+- **`.github/workflows/backup.yml`** runs it **twice daily — 12:00 noon and
+  11:00 PM Manila** (kept as separate `‹date›-noon.json` / `‹date›-night.json`
+  files, so both recovery points survive) — and on the **"Run workflow"** button
+  (a fresh, timestamped snapshot — use it before every payroll cutoff). Each run
+  also uploads the snapshot as a GitHub **artifact** (90-day retention) — a copy
+  that lives off Supabase.
 - **`scripts/backup/restore.mjs`** loads a snapshot back into a project.
 
 ## What's captured (and what isn't)
@@ -70,13 +72,16 @@ SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node scripts/backup/restore.mjs -
 
 # Surgical recovery — someone deleted a day of punches/payroll in a LIVE project.
 # Parents (profiles, branches) still exist, so restore just those tables:
-… node scripts/backup/restore.mjs --object=fermosa/2026-07-18.json \
+… node scripts/backup/restore.mjs --object=fermosa/2026-07-18-night.json \
     --tables=attendance_records,attendance_events --yes
 
 # Full preview (all tables), then apply:
-… node scripts/backup/restore.mjs --object=fermosa/2026-07-18.json          # dry-run
-… node scripts/backup/restore.mjs --object=fermosa/2026-07-18.json --yes    # writes
+… node scripts/backup/restore.mjs --object=fermosa/2026-07-18-night.json          # dry-run
+… node scripts/backup/restore.mjs --object=fermosa/2026-07-18-night.json --yes    # writes
 ```
+
+Snapshot filenames: scheduled runs are `‹date›-noon.json` / `‹date›-night.json`;
+manual runs are `manual-‹date›T‹time›.json`. Use `--list` to see what's there.
 
 - The **target** project is whatever `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`
   point at — set them to a fresh project for a disaster restore.
