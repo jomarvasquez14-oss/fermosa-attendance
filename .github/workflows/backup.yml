@@ -35,7 +35,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Node 22+ has native global WebSocket, which @supabase/supabase-js's
+          # realtime client requires at import (Node 20 throws on createClient).
+          node-version: '22'
 
       - name: Install backup dependency
         run: npm i @supabase/supabase-js@2 --no-save
