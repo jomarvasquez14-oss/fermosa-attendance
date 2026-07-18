@@ -491,11 +491,17 @@ export function Reports() {
               <tr key={i} className="hover:bg-gray-50">
                 {row.map((cell, j) => {
                   const header = table.headers[j];
-                  const pill =
+                  const rawPill =
                     (header === 'Approval' || (reportType === 'leave' && header === 'Status')) &&
                     typeof cell === 'string'
                       ? STATUS_PILL[cell]
                       : undefined;
+                  // In attendance reports a rejected day means "voided" (excluded
+                  // from payroll); a rejected leave request stays "Rejected".
+                  const pill =
+                    rawPill && header === 'Approval' && cell === 'rejected'
+                      ? { ...rawPill, label: 'Voided' }
+                      : rawPill;
                   return (
                     <td key={j} className="whitespace-nowrap px-3 py-2 text-gray-700">
                       {pill ? (

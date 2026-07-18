@@ -96,7 +96,7 @@ const STATUS_BADGE: Record<AttendanceStatus, string> = {
 const STATUS_LABEL: Record<AttendanceStatus, string> = {
   pending_review: 'Pending review',
   approved: 'Approved',
-  rejected: 'Rejected',
+  rejected: 'Voided',
   corrected: 'Corrected',
 };
 
@@ -592,7 +592,7 @@ export function Reviews() {
   ) => {
     setError(null);
     if (status === 'rejected' && !note) {
-      note = window.prompt('Reason for rejection:');
+      note = window.prompt('Reason for voiding this day (it will not count for payroll):');
       if (!note?.trim()) return;
     }
     const { error: rpcErr } = await supabase.rpc('review_attendance', {
@@ -614,7 +614,7 @@ export function Reviews() {
         <h2 className="text-lg font-semibold text-ink">Attendance reviews</h2>
         <p className="text-sm text-gray-500">
           {canReview
-            ? 'Only approved attendance becomes official. Rejections and corrections require a note.'
+            ? 'Only approved attendance becomes official. Void marks a day as not counted for payroll (the punches stay as a record); Restore undoes it. Voids and corrections require a note.'
             : 'View-only: approvals are handled by HR, operations, or super admin.'}
         </p>
       </div>
@@ -782,25 +782,29 @@ export function Reviews() {
                     >
                       {openId === r.id ? 'Hide' : 'Punches'}
                     </button>
-                    {canReview && r.status === 'pending_review' && (
-                      <>
-                        <button
-                          onClick={() => review(r.id, 'approved')}
-                          className="rounded-lg bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => review(r.id, 'rejected')}
-                          className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
-                        >
-                          Reject
-                        </button>
-                      </>
+                    {/* Approve a pending day; Restore un-voids a voided day. */}
+                    {canReview && (r.status === 'pending_review' || r.status === 'rejected') && (
+                      <button
+                        onClick={() => review(r.id, 'approved')}
+                        className="rounded-lg bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700"
+                      >
+                        {r.status === 'rejected' ? 'Restore' : 'Approve'}
+                      </button>
                     )}
-                    {/* Correct stays available after approval — an approved day can still be
-                        adjusted (it becomes `corrected`, which is still payable). */}
+                    {/* Void any day that still counts — voids the "present" for payroll
+                        while the punches stay as evidence. Prompts for a reason. */}
                     {canReview && r.status !== 'rejected' && (
+                      <button
+                        onClick={() => review(r.id, 'rejected')}
+                        className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
+                      >
+                        Void
+                      </button>
+                    )}
+                    {/* Correct stays available for every reviewer row — an approved day can
+                        still be adjusted (→ `corrected`, still payable), and a voided day can
+                        be corrected back to counting. */}
+                    {canReview && (
                       <button
                         onClick={() => setCorrectId(correctId === r.id ? null : r.id)}
                         className="btn px-2.5 py-1 text-xs"
