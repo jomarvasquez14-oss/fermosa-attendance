@@ -1,6 +1,7 @@
 import {
   PUNCH_LABELS,
   REVIEWER_ROLES,
+  branchShifts,
   computeDayMinutes,
   punchWindowForWorkDate,
   type AttendanceStatus,
@@ -33,6 +34,7 @@ interface RecordRow {
   // The shift the employee picked for this day (2-shift branch); null = branch Shift 1.
   shift_start: string | null;
   shift_end: string | null;
+  branch_id: string | null;
   employee: { id: string; full_name: string; employee_code: string } | null;
   branch: { name: string; shift_start: string; shift_end: string } | null;
   reviewer: { full_name: string } | null;
@@ -225,13 +227,19 @@ const timeInputFmt = new Intl.DateTimeFormat('en-GB', {
  */
 function CorrectionForm({
   record,
+  branches,
   settings,
   onSave,
   onCancel,
 }: {
   record: RecordRow;
+  branches: FilterOption[];
   settings: EngineSettings;
-  onSave: (note: string, corrections: Record<string, number | string>) => void;
+  onSave: (
+    note: string,
+    corrections: Record<string, number | string>,
+    branchChange: { branchId: string; shiftStart: string; shiftEnd: string } | null,
+  ) => void;
   onCancel: () => void;
 }) {
   const [inTime, setInTime] = useState(() => {
@@ -250,6 +258,33 @@ function CorrectionForm({
   const [undertimeMin, setUndertimeMin] = useState('');
   const [otMin, setOtMin] = useState('');
 
+  // Branch + shift the day is attributed to (fix a roving/supervisor misclick).
+  const [branchId, setBranchId] = useState(record.branch_id ?? '');
+  const selectedBranch = branches.find((b) => b.id === branchId) ?? null;
+  const shiftOptions =
+    selectedBranch?.shift_start && selectedBranch.shift_end
+      ? branchShifts({
+          shift_start: selectedBranch.shift_start,
+          shift_end: selectedBranch.shift_end,
+          shift2_start: selectedBranch.shift2_start,
+          shift2_end: selectedBranch.shift2_end,
+          shift3_start: selectedBranch.shift3_start,
+          shift3_end: selectedBranch.shift3_end,
+        })
+      : [];
+  // Default the shift index to the record's pinned shift (same branch), else 0.
+  const [shiftIdx, setShiftIdx] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (branchId === record.branch_id && record.shift_start) {
+      const i = shiftOptions.findIndex((o) => o.start.slice(0, 5) === record.shift_start!.slice(0, 5));
+      setShiftIdx(i >= 0 ? i : 0);
+    } else {
+      setShiftIdx(0);
+    }
+  }, [branchId]);
+  const chosenShift = shiftOptions[shiftIdx] ?? null;
+
   // 'HH:MM' on the work date (Manila) → ISO. The out time rolls to the next
   // day when it isn't after the in time (overnight shifts).
   const inIso = inTime ? new Date(`${record.work_date}T${inTime}:00+08:00`).toISOString() : null;
@@ -262,10 +297,10 @@ function CorrectionForm({
   if (inIso && outIso) {
     minutes = computeDayMinutes({
       workDate: record.work_date,
-      // The shift the employee picked for this day (2-shift branch) wins over
-      // the branch default, so recomputed late matches what the engine used.
-      shiftStart: record.shift_start ?? record.branch?.shift_start ?? '00:00',
-      shiftEnd: record.shift_end ?? record.branch?.shift_end ?? '00:00',
+      // The chosen branch's shift (with the Shift picker for multi-shift
+      // branches) drives late/OT, so a corrected branch re-measures correctly.
+      shiftStart: chosenShift?.start ?? record.shift_start ?? record.branch?.shift_start ?? '00:00',
+      shiftEnd: chosenShift?.end ?? record.shift_end ?? record.branch?.shift_end ?? '00:00',
       firstInIso: inIso,
       lastOutIso: outIso,
       punchedBreakMin: record.break_minutes ?? 0,
@@ -273,7 +308,7 @@ function CorrectionForm({
       otThresholdMin: settings.ot_threshold_min,
       minBreakMin: settings.min_break_min,
     });
-    if (minutes && !record.branch) {
+    if (minutes && !selectedBranch && !record.branch) {
       // No branch shift to compare against — only span-based numbers apply.
       minutes = { ...minutes, late_minutes: 0, undertime_minutes: 0, overtime_minutes: 0 };
     }
@@ -288,18 +323,48 @@ function CorrectionForm({
       setUndertimeMin(String(minutes.undertime_minutes));
       setOtMin(String(minutes.overtime_minutes));
     }
-  }, [inIso, outIso]);
+  }, [inIso, outIso, branchId, shiftIdx]);
 
   const clampMin = (v: string) => Math.max(0, Math.round(Number(v) || 0));
+
+  // Persist a branch/shift change when the branch differs, or the chosen shift
+  // differs from what the record currently uses.
+  const norm = (t: string | null | undefined) => (t ? t.slice(0, 5) : null);
+  const currentStart = record.shift_start ?? record.branch?.shift_start ?? null;
+  const currentEnd = record.shift_end ?? record.branch?.shift_end ?? null;
+  const branchChanged =
+    !!branchId &&
+    (branchId !== record.branch_id ||
+      (chosenShift != null &&
+        (norm(chosenShift.start) !== norm(currentStart) || norm(chosenShift.end) !== norm(currentEnd))));
 
   return (
     <div className="border-t border-gray-200 bg-amber-50 px-4 py-3">
       <p className="text-xs font-semibold text-amber-800">
         Correct this day — enter the actual times; Late / Undertime / OT default to the computed
-        values, edit them to waive or grant (e.g. set Late to 0 to excuse a late). Worked hours
-        follow the times.
+        values, edit them to waive or grant (e.g. set Late to 0 to excuse a late). Change Branch to
+        fix a roving/supervisor misclick — Late/OT re-measure against that branch's hours.
       </p>
       <div className="mt-2 flex flex-wrap items-end gap-3">
+        <label className="text-xs text-gray-600">
+          Branch
+          <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="mt-1 block input">
+            <option value="">— select branch —</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        </label>
+        {shiftOptions.length > 1 && (
+          <label className="text-xs text-gray-600">
+            Shift
+            <select value={shiftIdx} onChange={(e) => setShiftIdx(Number(e.target.value))} className="mt-1 block input">
+              {shiftOptions.map((o, i) => (
+                <option key={i} value={i}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="text-xs text-gray-600">
           Time in
           <input type="time" value={inTime} onChange={(e) => setInTime(e.target.value)}
@@ -327,21 +392,27 @@ function CorrectionForm({
         </label>
         <label className="min-w-64 flex-1 text-xs text-gray-600">
           Reason (required)
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. forgot to time out, confirmed with branch manager"
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. wrong branch tapped — confirmed with branch manager"
             className="mt-1 block w-full input" />
         </label>
         <button
           onClick={() => {
             if (!minutes || !inIso || !outIso) return;
-            onSave(note, {
-              first_in: inIso,
-              last_out: outIso,
-              worked_minutes: minutes.worked_minutes,
-              break_minutes: minutes.break_minutes,
-              late_minutes: clampMin(lateMin),
-              undertime_minutes: clampMin(undertimeMin),
-              overtime_minutes: clampMin(otMin),
-            });
+            onSave(
+              note,
+              {
+                first_in: inIso,
+                last_out: outIso,
+                worked_minutes: minutes.worked_minutes,
+                break_minutes: minutes.break_minutes,
+                late_minutes: clampMin(lateMin),
+                undertime_minutes: clampMin(undertimeMin),
+                overtime_minutes: clampMin(otMin),
+              },
+              branchChanged && chosenShift
+                ? { branchId, shiftStart: chosenShift.start, shiftEnd: chosenShift.end }
+                : null,
+            );
           }}
           disabled={!note.trim() || !minutes}
           className="btn-primary"
@@ -558,6 +629,10 @@ interface FilterOption {
   branch_id?: string | null; // employees: home branch (null = roving)
   shift_start?: string; // branches: for manual-entry math
   shift_end?: string;
+  shift2_start?: string | null; // branches: multi-shift (for the Correct picker)
+  shift2_end?: string | null;
+  shift3_start?: string | null;
+  shift3_end?: string | null;
 }
 
 export function Reviews() {
@@ -594,7 +669,7 @@ export function Reviews() {
       .then(({ data }) => setEmployees((data as FilterOption[]) ?? []));
     supabase
       .from('branches')
-      .select('id, name, shift_start, shift_end')
+      .select('id, name, shift_start, shift_end, shift2_start, shift2_end, shift3_start, shift3_end')
       .eq('is_active', true)
       .order('name')
       .then(({ data }) => setBranches((data as FilterOption[]) ?? []));
@@ -615,7 +690,7 @@ export function Reviews() {
     let q = supabase
       .from('attendance_records')
       .select(
-        'id, work_date, status, review_note, reviewed_at, first_in, last_out, worked_minutes, break_minutes, late_minutes, undertime_minutes, overtime_minutes, day_class, flags, corrections, shift_start, shift_end, employee:profiles!attendance_records_employee_id_fkey(id, full_name, employee_code), branch:branches(name, shift_start, shift_end), reviewer:profiles!attendance_records_reviewed_by_fkey(full_name)',
+        'id, work_date, status, review_note, reviewed_at, first_in, last_out, worked_minutes, break_minutes, late_minutes, undertime_minutes, overtime_minutes, day_class, flags, corrections, shift_start, shift_end, branch_id, employee:profiles!attendance_records_employee_id_fkey(id, full_name, employee_code), branch:branches(name, shift_start, shift_end), reviewer:profiles!attendance_records_reviewed_by_fkey(full_name)',
       )
       .order('work_date', { ascending: false })
       .limit(100);
@@ -654,6 +729,31 @@ export function Reviews() {
       setCorrectId(null);
       load();
     }
+  };
+
+  // Save a Correct: apply a branch/shift change first (if any), then the
+  // time/minute correction. Two audited steps; both surface errors inline.
+  const saveCorrection = async (
+    id: string,
+    note: string,
+    corrections: Record<string, number | string>,
+    branchChange: { branchId: string; shiftStart: string; shiftEnd: string } | null,
+  ) => {
+    setError(null);
+    if (branchChange) {
+      const { error: brErr } = await supabase.rpc('correct_attendance_branch', {
+        p_record_id: id,
+        p_branch_id: branchChange.branchId,
+        p_shift_start: branchChange.shiftStart,
+        p_shift_end: branchChange.shiftEnd,
+        p_note: note,
+      });
+      if (brErr) {
+        setError(brErr.message);
+        return;
+      }
+    }
+    await review(id, 'corrected', note, corrections);
   };
 
   return (
@@ -869,8 +969,11 @@ export function Reviews() {
                     <td colSpan={8} className="p-0">
                       <CorrectionForm
                         record={r}
+                        branches={branches}
                         settings={engineSettings}
-                        onSave={(note, corrections) => void review(r.id, 'corrected', note, corrections)}
+                        onSave={(note, corrections, branchChange) =>
+                          void saveCorrection(r.id, note, corrections, branchChange)
+                        }
                         onCancel={() => setCorrectId(null)}
                       />
                     </td>
