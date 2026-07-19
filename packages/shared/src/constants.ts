@@ -63,6 +63,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   profile_updated: 'Profile updated',
   attendance_reviewed: 'Attendance reviewed',
   attendance_day_created: 'Attendance day created',
+  attendance_branch_corrected: 'Attendance branch corrected',
   leave_reviewed: 'Leave reviewed',
   mfa_enrolled: '2FA enabled',
   mfa_disabled: '2FA disabled',
