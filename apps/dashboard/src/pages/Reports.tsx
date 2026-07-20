@@ -66,6 +66,12 @@ interface BranchLite {
   name: string;
 }
 
+/** Company rules needed to apply the payroll half-day rule to timesheet totals. */
+interface EngineSettings {
+  late_grace_min: number;
+  half_day_late_min: number;
+}
+
 const EFF_COLS =
   'id, employee_id, branch_id, work_date, status, day_class, flags, first_in, last_out, worked_minutes, late_minutes, undertime_minutes, overtime_minutes';
 
@@ -123,6 +129,7 @@ export function Reports() {
 
   const [branches, setBranches] = useState<BranchLite[]>([]);
   const [employees, setEmployees] = useState<EmployeeLite[]>([]);
+  const [settings, setSettings] = useState<EngineSettings | null>(null);
   const [payrollRows, setPayrollRows] = useState<PayrollSummaryRow[]>([]);
   const [effRows, setEffRows] = useState<EffRow[]>([]);
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([]);
@@ -147,6 +154,12 @@ export function Reports() {
       .select('id, full_name, employee_code, branch_id')
       .order('full_name')
       .then(({ data }) => setEmployees((data as EmployeeLite[]) ?? []));
+    // Readable by any company member, so branch managers get the same totals.
+    supabase
+      .from('attendance_settings')
+      .select('late_grace_min, half_day_late_min')
+      .maybeSingle()
+      .then(({ data }) => setSettings((data as EngineSettings | null) ?? null));
   }, []);
 
   const load = useCallback(async () => {
@@ -314,6 +327,35 @@ export function Reports() {
     }
   }, [reportType, payrollRows, effRows, leaveRows, year, month, half, dayDate, branchId, employeeId, empMap, branchMap, isCompanyWide]);
 
+  /**
+   * Totals for the Employee timesheet. Deliberately the SAME rule the employee
+   * sees on their own "My summary" card (components/CutoffSummary.tsx), so HR's
+   * number and the employee's can never disagree: a voided day counts nothing,
+   * still-pending days ARE included (and flagged below), and a day past the
+   * half-day-late threshold counts 0.5 — exactly as payroll counts it.
+   */
+  const timesheetSummary = useMemo(() => {
+    if (reportType !== 'timesheet') return null;
+    const grace = settings?.late_grace_min ?? 15;
+    const halfDayAt = settings?.half_day_late_min ?? 60;
+    const halfDayLate = Math.max(halfDayAt - grace, 1);
+    let present = 0;
+    let worked = 0;
+    let late = 0;
+    let ot = 0;
+    let pending = 0;
+    for (const r of effRows) {
+      if (r.status === 'rejected') continue; // voided → counts nothing, anywhere
+      if (r.status === 'pending_review') pending += 1;
+      if (!r.first_in) continue; // absent / on-leave days add no hours
+      present += halfDayAt > 0 && r.late_minutes >= halfDayLate ? 0.5 : 1;
+      worked += r.worked_minutes;
+      late += r.late_minutes;
+      ot += r.overtime_minutes;
+    }
+    return { present, worked, late, ot, pending };
+  }, [reportType, effRows, settings]);
+
   if (!profile) return null;
 
   const scopeLabel = reportType === 'daily' ? dayDate : formatPeriodLabel(period);
@@ -467,6 +509,35 @@ export function Reports() {
         </span>
         {loading && <span>Loading…</span>}
       </div>
+
+      {reportType === 'timesheet' && employeeId && timesheetSummary && (
+        <div className="mt-1 card p-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+              <div className="tnum text-2xl font-bold text-ink">{fmtDays(timesheetSummary.present)}</div>
+              <div className="mt-0.5 text-xs font-semibold text-muted">Days present</div>
+            </div>
+            <div>
+              <div className="tnum text-2xl font-bold text-ink">{hours(timesheetSummary.worked)}</div>
+              <div className="mt-0.5 text-xs font-semibold text-muted">Worked (h)</div>
+            </div>
+            <div>
+              <div className="tnum text-2xl font-bold text-amber-700">{timesheetSummary.late}</div>
+              <div className="mt-0.5 text-xs font-semibold text-muted">Late (min)</div>
+            </div>
+            <div>
+              <div className="tnum text-2xl font-bold text-sky-700">{timesheetSummary.ot}</div>
+              <div className="mt-0.5 text-xs font-semibold text-muted">OT (min)</div>
+            </div>
+          </div>
+          {timesheetSummary.pending > 0 && (
+            <p className="mt-3 text-xs text-gray-500">
+              {timesheetSummary.pending} day{timesheetSummary.pending > 1 ? 's' : ''} still awaiting
+              review — included above, but not payable until approved.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mt-1 overflow-x-auto card">
         <table className="w-full text-left text-sm">

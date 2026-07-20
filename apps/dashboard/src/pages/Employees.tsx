@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
 import { useAuth } from '../lib/auth';
+import { exportCsv, exportXlsx, type Cell } from '../lib/exportTable';
 import { supabase } from '../lib/supabase';
 
 export const STATUS_LABELS: Record<EmploymentStatus, string> = {
@@ -12,6 +13,9 @@ export const STATUS_LABELS: Record<EmploymentStatus, string> = {
   resigned: 'Resigned',
   terminated: 'Terminated',
 };
+
+/** Roster export — same columns as the on-screen table. */
+const EXPORT_HEADERS = ['Name', 'Code', 'Role', 'Branch', 'Position', 'Status'];
 
 interface EmployeeRow {
   id: string;
@@ -61,6 +65,19 @@ export function Employees() {
     return matchesSearch && matchesBranch;
   });
 
+  // Export deliberately uses `rows`, not `visible`: a search or branch filter on
+  // screen must never silently truncate the roster file HR hands out.
+  const exportName = `employees_${new Date().toISOString().slice(0, 10)}`;
+  const exportRows = (): Cell[][] =>
+    rows.map((r) => [
+      r.full_name,
+      r.employee_code,
+      ROLE_LABELS[r.role],
+      r.branch?.name ?? '',
+      r.position?.name ?? '',
+      STATUS_LABELS[r.employment_status],
+    ]);
+
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader
@@ -69,9 +86,29 @@ export function Employees() {
         subtitle={isAdmin ? 'Everyone in the company.' : 'Employees in your branch.'}
         right={
           isAdmin && (
-            <Link to="/employees/new" className="btn-primary">
-              New employee
-            </Link>
+            <>
+              <button
+                onClick={() =>
+                  exportXlsx(exportName, [
+                    { name: 'Employees', headers: EXPORT_HEADERS, rows: exportRows() },
+                  ])
+                }
+                disabled={rows.length === 0}
+                className="btn disabled:opacity-50"
+              >
+                Export Excel
+              </button>
+              <button
+                onClick={() => exportCsv(exportName, EXPORT_HEADERS, exportRows())}
+                disabled={rows.length === 0}
+                className="btn disabled:opacity-50"
+              >
+                Export CSV
+              </button>
+              <Link to="/employees/new" className="btn-primary">
+                New employee
+              </Link>
+            </>
           )
         }
       />
