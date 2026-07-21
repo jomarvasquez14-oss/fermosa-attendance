@@ -22,6 +22,7 @@ import { TimeClock } from './pages/TimeClock';
 import { MyLeave } from './pages/MyLeave';
 import { MyPayslip } from './pages/MyPayslip';
 import { ChangePassword } from './pages/ChangePassword';
+import { KioskPin } from './pages/KioskPin';
 
 function Loading() {
   return (
@@ -83,6 +84,7 @@ export default function App() {
             <Route path="/my/leave" element={<MyLeave />} />
             <Route path="/my/payslip" element={<MyPayslip />} />
             <Route path="/my/password" element={<ChangePassword />} />
+            <Route path="/my/pin" element={<KioskPin />} />
             <Route path="/employees" element={<Employees />} />
             <Route path="/employees/new" element={<EmployeeForm />} />
             <Route path="/employees/:id" element={<EmployeeForm />} />

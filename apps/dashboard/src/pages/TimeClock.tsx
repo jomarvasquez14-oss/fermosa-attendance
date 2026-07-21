@@ -13,7 +13,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CutoffSummary } from '../components/CutoffSummary';
 import { InAppBrowserBanner } from '../components/InAppBrowserBanner';
-import { KioskPinCard } from '../components/KioskPinCard';
 import { PageHeader } from '../components/PageHeader';
 import { WebcamCapture } from '../components/WebcamCapture';
 import { useAuth } from '../lib/auth';
@@ -570,9 +569,10 @@ export function TimeClock() {
         <Link to="/my/password" className="btn">
           Change password
         </Link>
+        <Link to="/my/pin" className="btn">
+          Kiosk PIN
+        </Link>
       </div>
-
-      <KioskPinCard />
 
       <CutoffSummary profile={profile} />
 
