@@ -1,5 +1,5 @@
 import type { PunchType } from '@fermosa/shared';
-import { supabaseAnonKey, supabaseUrl } from './supabase';
+import { supabase, supabaseAnonKey, supabaseUrl } from './supabase';
 
 /**
  * Web kiosk mode: this browser is a shared branch terminal. The registration
@@ -33,6 +33,33 @@ export function writeKioskConfig(config: KioskConfig): void {
 
 export function clearKioskConfig(): void {
   localStorage.removeItem(KIOSK_KEY);
+}
+
+/**
+ * Register THIS browser as a branch kiosk and store the returned device key
+ * locally. Used by both setup surfaces — an admin (Kiosks page, any branch) and
+ * a dedicated kiosk login (branch-locked; the server ignores the branch it
+ * sends and uses the login's own branch). The plaintext key is returned once.
+ */
+export async function registerAndStoreKiosk(args: {
+  branchId: string;
+  branchName: string;
+  deviceName: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data, error } = await supabase.rpc('register_kiosk_device', {
+    p_branch_id: args.branchId,
+    p_name: args.deviceName,
+  });
+  if (error) return { ok: false, error: error.message };
+  const result = data as { device_id: string; device_key: string };
+  writeKioskConfig({
+    device_id: result.device_id,
+    device_key: result.device_key,
+    branch_id: args.branchId,
+    branch_name: args.branchName,
+    device_name: args.deviceName,
+  });
+  return { ok: true };
 }
 
 export interface KioskPunchResult {

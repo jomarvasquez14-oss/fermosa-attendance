@@ -12,6 +12,7 @@ import { Overview } from './pages/Overview';
 import { Punches } from './pages/Punches';
 import { Kiosks } from './pages/Kiosks';
 import { KioskMode } from './pages/KioskMode';
+import { KioskSetup } from './pages/KioskSetup';
 import { Leave } from './pages/Leave';
 import { Payslips } from './pages/Payslips';
 import { Reports } from './pages/Reports';
@@ -62,6 +63,9 @@ function RequireAuth() {
       </div>
     );
   }
+  // A dedicated kiosk login only ever sees the bare setup screen (never the
+  // dashboard shell), whatever the URL it lands on.
+  if (profile.role === 'kiosk') return <KioskSetup />;
   return <Layout />;
 }
 

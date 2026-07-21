@@ -8,7 +8,10 @@ export type Role =
   | 'branch_manager'
   | 'hr'
   | 'operations_manager'
-  | 'super_admin';
+  | 'super_admin'
+  // A dedicated low-privilege login used only to set up + run a branch kiosk.
+  // Sees nothing else (RLS default-deny); locked to one branch.
+  | 'kiosk';
 
 export type EmploymentStatus = 'active' | 'probationary' | 'on_leave' | 'resigned' | 'terminated';
 

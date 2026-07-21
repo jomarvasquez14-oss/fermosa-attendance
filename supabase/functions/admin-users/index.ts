@@ -6,7 +6,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-type Role = 'employee' | 'branch_manager' | 'hr' | 'operations_manager' | 'super_admin';
+type Role = 'employee' | 'branch_manager' | 'hr' | 'operations_manager' | 'super_admin' | 'kiosk';
 
 const ADMIN_ROLES: Role[] = ['hr', 'operations_manager', 'super_admin'];
 

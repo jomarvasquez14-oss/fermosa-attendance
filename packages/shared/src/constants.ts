@@ -35,6 +35,15 @@ export const BREAKS_ENABLED = false;
 /** Roles with company-wide visibility (vs. own-branch or own-records). */
 export const COMPANY_WIDE_ROLES: Role[] = ['hr', 'operations_manager', 'super_admin'];
 
+/**
+ * Who may set up / exit a kiosk: company admins, plus a dedicated `kiosk` login
+ * (so a shared tablet can be provisioned and unlocked without an admin's own
+ * credentials). Mirrors app.can_manage_kiosk() in the database.
+ */
+export function canSetupKiosk(role: Role): boolean {
+  return COMPANY_WIDE_ROLES.includes(role) || role === 'kiosk';
+}
+
 /** Punch uploads whose device-vs-server time gap exceeds this are flagged for HR review. */
 export const CLOCK_DRIFT_FLAG_THRESHOLD_MIN = 24 * 60; // offline punches can legitimately sync a day late
 
@@ -80,4 +89,5 @@ export const ROLE_LABELS: Record<Role, string> = {
   hr: 'HR',
   operations_manager: 'Operations Manager',
   super_admin: 'Super Admin',
+  kiosk: 'Kiosk',
 };

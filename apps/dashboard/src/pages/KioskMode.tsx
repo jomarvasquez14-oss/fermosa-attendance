@@ -1,5 +1,5 @@
 import {
-  COMPANY_WIDE_ROLES,
+  canSetupKiosk,
   PUNCH_LABELS,
   usernameToEmail,
   type PunchType,
@@ -124,9 +124,9 @@ export function KioskMode() {
       .eq('id', data.user.id)
       .maybeSingle();
     setExitBusy(false);
-    if (!prof || !COMPANY_WIDE_ROLES.includes(prof.role as Role)) {
+    if (!prof || !canSetupKiosk(prof.role as Role)) {
       await supabase.auth.signOut();
-      setExitError('Only HR, operations, or super admin can exit kiosk mode.');
+      setExitError('Only an admin or a kiosk login can exit kiosk mode.');
       return;
     }
     clearKioskConfig();

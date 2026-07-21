@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
-import { writeKioskConfig } from '../lib/kioskWeb';
+import { registerAndStoreKiosk } from '../lib/kioskWeb';
 import { supabase } from '../lib/supabase';
 
 interface DeviceRow {
@@ -60,26 +60,20 @@ export function Kiosks() {
   // locally, and open the locked terminal. The key is shown only once.
   const activate = async () => {
     if (!setupBranchId || !setupName.trim()) return;
+    const branch = branches.find((b) => b.id === setupBranchId);
+    if (!branch) return;
     setSetupBusy(true);
     setSetupError(null);
-    const { data, error: rpcErr } = await supabase.rpc('register_kiosk_device', {
-      p_branch_id: setupBranchId,
-      p_name: setupName.trim(),
+    const res = await registerAndStoreKiosk({
+      branchId: setupBranchId,
+      branchName: branch.name,
+      deviceName: setupName.trim(),
     });
     setSetupBusy(false);
-    if (rpcErr) {
-      setSetupError(rpcErr.message);
+    if (!res.ok) {
+      setSetupError(res.error);
       return;
     }
-    const result = data as { device_id: string; device_key: string };
-    const branch = branches.find((b) => b.id === setupBranchId)!;
-    writeKioskConfig({
-      device_id: result.device_id,
-      device_key: result.device_key,
-      branch_id: setupBranchId,
-      branch_name: branch.name,
-      device_name: setupName.trim(),
-    });
     navigate('/kiosk');
   };
 
@@ -105,8 +99,10 @@ export function Kiosks() {
         <h2 className="text-sm font-semibold text-ink">Set up this device as a kiosk</h2>
         <p className="mt-1 text-sm text-muted">
           Do this <span className="font-medium">on the shared tablet/laptop</span> that will stay at
-          the branch. This browser locks into the kiosk terminal; exiting needs an admin sign-in.
-          Each employee also needs a Kiosk PIN (Employees → open the person → Set PIN).
+          the branch. This browser locks into the kiosk terminal; exiting needs an admin (or kiosk)
+          sign-in. Each employee also needs a Kiosk PIN (Employees → open the person → Set PIN).
+          To avoid signing in with your own account on the tablet, create a dedicated branch
+          <span className="font-medium"> kiosk login</span> in Settings → Kiosk logins and set it up there instead.
         </p>
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <label className="text-sm">

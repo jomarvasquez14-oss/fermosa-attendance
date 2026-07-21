@@ -42,6 +42,8 @@ export function Employees() {
       .select(
         'id, full_name, employee_code, role, employment_status, branch:branches(id, name), position:positions(name)',
       )
+      // Kiosk logins are system accounts, not staff — keep them off the roster.
+      .neq('role', 'kiosk')
       .order('full_name')
       .then(({ data }) => {
         setRows((data as unknown as EmployeeRow[]) ?? []);

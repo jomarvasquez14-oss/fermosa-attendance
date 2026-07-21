@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { TwoFactorCard } from '../components/TwoFactorCard';
+import { createEmployee, generateTempPassword, resetPassword } from '../lib/adminApi';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 
@@ -8,6 +9,17 @@ interface HolidayRow {
   holiday_date: string;
   name: string;
   kind: 'regular' | 'special';
+}
+
+interface BranchOpt {
+  id: string;
+  name: string;
+}
+
+interface KioskLoginRow {
+  id: string;
+  full_name: string;
+  branch: { name: string } | null;
 }
 
 interface LeaveTypeRow {
@@ -37,6 +49,13 @@ export function Settings() {
   const [ltName, setLtName] = useState('');
   const [ltPaid, setLtPaid] = useState(true);
   const [ltDays, setLtDays] = useState('5');
+  const [branchOpts, setBranchOpts] = useState<BranchOpt[]>([]);
+  const [kioskLogins, setKioskLogins] = useState<KioskLoginRow[]>([]);
+  const [kUser, setKUser] = useState('');
+  const [kPass, setKPass] = useState('');
+  const [kBranchId, setKBranchId] = useState('');
+  const [kBusy, setKBusy] = useState(false);
+  const [kNotice, setKNotice] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +72,10 @@ export function Settings() {
       .then(({ data }) => setHolidays((data as HolidayRow[]) ?? []));
     supabase.from('leave_types').select('id, name, is_paid, default_days_per_year, is_active, birthday_only').order('name')
       .then(({ data }) => setLeaveTypes((data as LeaveTypeRow[]) ?? []));
+    supabase.from('branches').select('id, name').eq('is_active', true).order('name')
+      .then(({ data }) => setBranchOpts((data as BranchOpt[]) ?? []));
+    supabase.from('profiles').select('id, full_name, branch:branches(name)').eq('role', 'kiosk').order('full_name')
+      .then(({ data }) => setKioskLogins((data as unknown as KioskLoginRow[]) ?? []));
   }, []);
 
   useEffect(load, [load]);
@@ -126,6 +149,53 @@ export function Settings() {
     const { error: err } = await supabase.from('leave_types').update(patch).eq('id', t.id);
     if (err) setError(err.message);
     else load();
+  };
+
+  const createKioskLogin = async () => {
+    setError(null);
+    setKNotice(null);
+    const username = kUser.trim().toLowerCase();
+    if (!username || kPass.length < 8 || !kBranchId) {
+      setError('Kiosk login needs a username, a password of at least 8 characters, and a branch.');
+      return;
+    }
+    const branch = branchOpts.find((b) => b.id === kBranchId);
+    if (!branch) return;
+    setKBusy(true);
+    const res = await createEmployee({
+      email: username,
+      password: kPass,
+      full_name: `${branch.name} Kiosk`,
+      employee_code: `KIOSK-${crypto.randomUUID().slice(0, 6).toUpperCase()}`,
+      role: 'kiosk',
+      branch_id: kBranchId,
+      department_id: null,
+      position_id: null,
+      employment_status: 'active',
+      phone: null,
+    });
+    setKBusy(false);
+    if (!res.ok) {
+      setError(res.error ?? 'Failed to create kiosk login');
+      return;
+    }
+    setKNotice(
+      `Kiosk login created for ${branch.name}. Sign in on that tablet with — username: ${username} · password: ${kPass}`,
+    );
+    setKUser('');
+    setKPass('');
+    setKBranchId('');
+    load();
+  };
+
+  const resetKioskPassword = async (k: KioskLoginRow) => {
+    setError(null);
+    setKNotice(null);
+    const pw = generateTempPassword();
+    if (!window.confirm(`Reset the password for "${k.full_name}"? The new password will be shown once.`)) return;
+    const res = await resetPassword(k.id, pw);
+    if (!res.ok) setError(res.error ?? 'Failed to reset password');
+    else setKNotice(`Password reset for ${k.full_name}: ${pw}`);
   };
 
   const grantEntitlements = async () => {
@@ -318,6 +388,88 @@ export function Settings() {
           </tbody>
         </table>
       </div>
+
+      <h3 className="mt-8 text-base font-semibold text-gray-900">Kiosk logins</h3>
+      <p className="text-sm text-gray-500">
+        A dedicated low-privilege account for each branch's shared tablet — so no HR/supervisor
+        account is ever signed in on a device staff can touch. A kiosk login can only set up and run
+        its branch's kiosk; it sees no employees, attendance, or payroll. Sign in with it on the
+        tablet, name the device, and it locks into the kiosk terminal.
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-end gap-3 card p-4">
+        <div>
+          <label className={labelClass}>Branch</label>
+          <select value={kBranchId} onChange={(e) => setKBranchId(e.target.value)} className={`${inputClass} w-48`}>
+            <option value="">— select a branch —</option>
+            {branchOpts.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>Username</label>
+          <input
+            value={kUser}
+            onChange={(e) => setKUser(e.target.value)}
+            placeholder="e.g. kiosk-silang"
+            autoCapitalize="none"
+            className={`${inputClass} w-44`}
+          />
+        </div>
+        <div>
+          <label className={labelClass}>Password</label>
+          <div className="mt-1 flex gap-2">
+            <input value={kPass} onChange={(e) => setKPass(e.target.value)} placeholder="min 8 chars" className="input w-40" />
+            <button
+              type="button"
+              onClick={() => setKPass(generateTempPassword())}
+              className="rounded-lg border border-brand-300 px-2 text-xs font-medium text-brand-700 hover:bg-brand-50"
+            >
+              Generate
+            </button>
+          </div>
+        </div>
+        <button
+          onClick={() => void createKioskLogin()}
+          disabled={!kUser.trim() || kPass.length < 8 || !kBranchId || kBusy}
+          className="btn-primary disabled:opacity-50"
+        >
+          {kBusy ? 'Creating…' : 'Create kiosk login'}
+        </button>
+      </div>
+      {kNotice && (
+        <p className="mt-3 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-800">{kNotice}</p>
+      )}
+
+      {kioskLogins.length > 0 && (
+        <div className="mt-3 overflow-hidden card">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-ground text-muted">
+              <tr>
+                <th className="px-4 py-2 font-medium">Kiosk login</th>
+                <th className="px-4 py-2 font-medium">Branch</th>
+                <th className="px-4 py-2" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {kioskLogins.map((k) => (
+                <tr key={k.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-2 font-medium text-gray-900">{k.full_name}</td>
+                  <td className="px-4 py-2 text-gray-700">{k.branch?.name ?? '—'}</td>
+                  <td className="px-4 py-2 text-right">
+                    <button onClick={() => void resetKioskPassword(k)} className="text-sm text-gray-500 hover:underline">
+                      Reset password
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <TwoFactorCard />
     </div>
