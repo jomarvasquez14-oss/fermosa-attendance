@@ -78,7 +78,7 @@ const EFF_COLS =
 /** Flags as readable text ("Time In/Out" wording), for tables and exports. */
 function flagText(flags: string[] | null): string {
   return (flags ?? [])
-    .map((f) => (f === 'no_clock_out' ? 'no time out' : f.replace(/_/g, ' ')))
+    .map((f) => (f === 'no_clock_out' ? 'no time out' : f === 'day_off' ? 'Day off' : f.replace(/_/g, ' ')))
     .join(', ');
 }
 
@@ -102,6 +102,7 @@ const timeManila = (iso: string | null) =>
 
 function dayStatus(r: EffRow): string {
   if (r.flags?.includes('on_leave')) return 'On leave';
+  if (r.flags?.includes('day_off')) return 'Day off';
   if (r.flags?.includes('absent')) return 'Absent';
   if (r.first_in) return 'Present';
   return '—';
@@ -302,13 +303,13 @@ export function Reports() {
     switch (reportType) {
       case 'payroll': {
         const headers = [
-          'Code', 'Name', 'Branch', 'Present', 'Full days', 'Absent', 'Worked (h)', 'Late (min)',
+          'Code', 'Name', 'Branch', 'Present', 'Full days', 'Absent', 'Day off', 'Worked (h)', 'Late (min)',
           'Undertime (min)', 'OT (min)', 'OT hrs (paid)', 'Paid leave', 'Unpaid leave', 'Rest-days worked', 'Holidays worked',
           // Rates + peso amounts are admin-only (RLS nulls them for branch managers — hide the empty columns).
           ...(isCompanyWide ? ['Daily rate (₱)', 'Allowance/full day (₱)', 'Late charge (₱)', 'OT pay (₱)'] : []),
         ];
         const rows: Cell[][] = payrollRows.map((r) => [
-          r.employee_code, r.full_name, r.branch_name, r.days_present, r.full_days, r.days_absent,
+          r.employee_code, r.full_name, r.branch_name, r.days_present, r.full_days, r.days_absent, r.days_off,
           hours(r.worked_minutes), r.late_minutes, r.undertime_minutes, r.overtime_minutes, r.ot_paid_hours,
           fmtDays(r.paid_leave_days), fmtDays(r.unpaid_leave_days), r.rest_days_worked, r.holidays_worked,
           ...(isCompanyWide ? [r.daily_rate ?? '', r.daily_allowance ?? '', r.late_charge ?? '', r.ot_pay ?? ''] : []),

@@ -50,6 +50,7 @@ const FLAG_BADGE: Record<string, string> = {
   on_leave: 'bg-green-100 text-green-700',
   half_day: 'bg-orange-100 text-orange-700', // 1+ hr late — payroll counts 0.5 day
   time_mismatch: 'bg-red-100 text-red-700', // device clock vs server clock gap
+  day_off: 'bg-slate-100 text-slate-700', // HR marked a no-punch day as a day off
 };
 
 const DAY_CLASS_LABEL: Record<string, string> = {
@@ -78,6 +79,7 @@ function effectiveTime(r: RecordRow, key: 'first_in' | 'last_out'): string | nul
 const FLAG_TEXT: Record<string, string> = {
   no_clock_out: 'no time out',
   time_mismatch: 'time gap',
+  day_off: 'Day off',
 };
 
 interface EventRow {
@@ -731,6 +733,21 @@ export function Reviews() {
     }
   };
 
+  // Classify a no-time-in day as Absent or Day off (instead of Approve/Void).
+  // A day off is neutral — not counted against the employee and pays nothing.
+  // Reversible: HR can switch a day between the two. Guarded server-side to
+  // no-punch days only.
+  const classifyDay = async (id: string, outcome: 'absent' | 'day_off') => {
+    setError(null);
+    const { error: rpcErr } = await supabase.rpc('classify_attendance_day', {
+      p_record_id: id,
+      p_outcome: outcome,
+      p_note: null,
+    });
+    if (rpcErr) setError(rpcErr.message);
+    else load();
+  };
+
   // Save a Correct: apply a branch/shift change first (if any), then the
   // time/minute correction. Two audited steps; both surface errors inline.
   const saveCorrection = async (
@@ -762,7 +779,7 @@ export function Reviews() {
         <h2 className="text-lg font-semibold text-ink">Attendance reviews</h2>
         <p className="text-sm text-gray-500">
           {canReview
-            ? 'Only approved attendance becomes official. Void marks a day as not counted for payroll (the punches stay as a record); Restore undoes it. Voids and corrections require a note.'
+            ? 'Only approved attendance becomes official. Void marks a day as not counted for payroll (the punches stay as a record); Restore undoes it. Voids and corrections require a note. A day with no time-in is either an Absence or a Day off — pick one; a day off isn’t counted against the employee and pays nothing.'
             : 'View-only: approvals are handled by HR, operations, or super admin.'}
         </p>
       </div>
@@ -908,11 +925,20 @@ export function Reviews() {
                   </td>
                   <td className="px-4 py-2">
                     <span className="flex flex-wrap gap-1">
-                      {(r.flags ?? []).map((f) => (
-                        <span key={f} className={`rounded-full px-1.5 py-0.5 text-[10px] ${FLAG_BADGE[f] ?? 'bg-gray-100 text-gray-600'}`}>
-                          {FLAG_TEXT[f] ?? f.replace(/_/g, ' ')}
-                        </span>
-                      ))}
+                      {(r.flags ?? []).map((f) => {
+                        // A no-time-in day is only "absent" once HR confirms it — while
+                        // still pending, show a neutral "No time-in" tag, not a red Absent.
+                        const pendingNoShow = f === 'absent' && r.status === 'pending_review';
+                        const cls = pendingNoShow
+                          ? 'bg-amber-100 text-amber-700'
+                          : FLAG_BADGE[f] ?? 'bg-gray-100 text-gray-600';
+                        const label = pendingNoShow ? 'No time-in' : FLAG_TEXT[f] ?? f.replace(/_/g, ' ');
+                        return (
+                          <span key={f} className={`rounded-full px-1.5 py-0.5 text-[10px] ${cls}`}>
+                            {label}
+                          </span>
+                        );
+                      })}
                     </span>
                   </td>
                   <td className="px-4 py-2">
@@ -931,24 +957,46 @@ export function Reviews() {
                     >
                       {openId === r.id ? 'Hide' : 'Punches'}
                     </button>
-                    {/* Approve a pending day; Restore un-voids a voided day. */}
-                    {canReview && (r.status === 'pending_review' || r.status === 'rejected') && (
-                      <button
-                        onClick={() => review(r.id, 'approved')}
-                        className="rounded-lg bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700"
-                      >
-                        {r.status === 'rejected' ? 'Restore' : 'Approve'}
-                      </button>
-                    )}
-                    {/* Void any day that still counts — voids the "present" for payroll
-                        while the punches stay as evidence. Prompts for a reason. */}
-                    {canReview && r.status !== 'rejected' && (
-                      <button
-                        onClick={() => review(r.id, 'rejected')}
-                        className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
-                      >
-                        Void
-                      </button>
+                    {canReview && !effectiveTime(r, 'first_in') && !(r.flags ?? []).includes('on_leave') ? (
+                      <>
+                        {/* No time-in: HR classifies the day (Absent or Day off) instead of
+                            Approve/Void. A day off is neutral — not counted, no pay.
+                            Reversible: clicking the other one switches it. */}
+                        <button
+                          onClick={() => classifyDay(r.id, 'absent')}
+                          className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
+                        >
+                          Absent
+                        </button>
+                        <button
+                          onClick={() => classifyDay(r.id, 'day_off')}
+                          className="rounded-lg bg-slate-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-700"
+                        >
+                          Day off
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {/* Approve a pending day; Restore un-voids a voided day. */}
+                        {canReview && (r.status === 'pending_review' || r.status === 'rejected') && (
+                          <button
+                            onClick={() => review(r.id, 'approved')}
+                            className="rounded-lg bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700"
+                          >
+                            {r.status === 'rejected' ? 'Restore' : 'Approve'}
+                          </button>
+                        )}
+                        {/* Void any day that still counts — voids the "present" for payroll
+                            while the punches stay as evidence. Prompts for a reason. */}
+                        {canReview && r.status !== 'rejected' && (
+                          <button
+                            onClick={() => review(r.id, 'rejected')}
+                            className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
+                          >
+                            Void
+                          </button>
+                        )}
+                      </>
                     )}
                     {/* Correct stays available for every reviewer row — an approved day can
                         still be adjusted (→ `corrected`, still payable), and a voided day can

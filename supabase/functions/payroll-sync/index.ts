@@ -46,7 +46,7 @@ function mfaSatisfied(caller: { factors?: { status?: string }[] } | null, authHe
 }
 
 const HEADERS = [
-  'Employee code', 'Name', 'Branch', 'Days present', 'Full days', 'Days absent', 'Worked hours',
+  'Employee code', 'Name', 'Branch', 'Days present', 'Full days', 'Days absent', 'Day off', 'Worked hours',
   'Late (min)', 'Undertime (min)', 'OT (min)', 'OT hrs (paid)', 'Paid leave', 'Unpaid leave',
   'Rest-days worked', 'Holidays worked', 'Daily rate', 'Allowance/full day', 'Late charge', 'OT pay',
 ];
@@ -58,6 +58,7 @@ interface PayrollRow {
   days_present: number;
   full_days: number;
   days_absent: number;
+  days_off: number;
   worked_minutes: number;
   late_minutes: number;
   undertime_minutes: number;
@@ -75,7 +76,7 @@ interface PayrollRow {
 
 function toValues(rows: PayrollRow[]): (string | number)[][] {
   const body = rows.map((r) => [
-    r.employee_code, r.full_name, r.branch_name, r.days_present, r.full_days, r.days_absent,
+    r.employee_code, r.full_name, r.branch_name, r.days_present, r.full_days, r.days_absent, r.days_off,
     Number((r.worked_minutes / 60).toFixed(2)), r.late_minutes, r.undertime_minutes,
     r.overtime_minutes, r.ot_paid_hours, r.paid_leave_days, r.unpaid_leave_days, r.rest_days_worked, r.holidays_worked,
     r.daily_rate ?? '', r.daily_allowance ?? '', r.late_charge ?? '', r.ot_pay ?? '',

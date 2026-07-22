@@ -98,6 +98,7 @@ export interface PayrollSummaryRow {
   scheduled_days: number; // days with a daily record in the period
   days_present: number;
   days_absent: number;
+  days_off: number; // no-punch days HR classified as a day off (not absent, 0 pay)
   worked_minutes: number;
   late_minutes: number;
   undertime_minutes: number;
@@ -249,7 +250,8 @@ export type RecordFlag =
   | 'absent'
   | 'on_leave'
   | 'half_day' // late >= attendance_settings.half_day_late_min — counts 0.5 in payroll
-  | 'time_mismatch'; // device time vs server receive time gap > 10 min
+  | 'time_mismatch' // device time vs server receive time gap > 10 min
+  | 'day_off'; // HR marked a no-punch day as a (legitimate) day off, not absent — 0 pay, not counted
 
 export interface Profile {
   id: string; // = auth.users.id
