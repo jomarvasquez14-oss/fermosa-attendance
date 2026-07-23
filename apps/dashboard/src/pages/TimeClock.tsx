@@ -57,7 +57,7 @@ const STATUS_LABEL = {
 
 const LOCATION_HELP: Record<LocationFailure, string> = {
   denied:
-    "Allow location for this site (tap the lock or settings icon in your browser's address bar → Location → Allow), then try again.",
+    'Location is blocked. If you opened this from Messenger or Facebook, open it in Chrome instead (tap the ⋮ menu → “Open in Chrome”). Otherwise tap the lock icon by the web address → Location → Allow, then try again.',
   unavailable:
     'Couldn’t get your location — turn on Location on your device, move near a window, and try again.',
   timeout:

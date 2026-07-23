@@ -13,5 +13,10 @@ export function detectInAppBrowser(): string | null {
   if (/\bLine\//i.test(ua)) return 'LINE';
   if (/TikTok|BytedanceWebview|musical_ly/i.test(ua)) return 'TikTok';
   if (/GSA\//i.test(ua) && /Version\//i.test(ua)) return 'Google app'; // in-app browser of the Google app
+  // Generic Android System WebView ("; wv)") — used by many chat/app in-app
+  // browsers whose UA doesn't name the host app (e.g. some Messenger builds).
+  // Real Chrome, Samsung Internet, and installed home-screen PWAs do NOT carry
+  // this marker, so it won't nag normal users.
+  if (/;\s?wv\)/i.test(ua)) return 'in-app';
   return null;
 }
