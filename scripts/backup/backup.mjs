@@ -126,6 +126,17 @@ async function main() {
   snapshot.auth_users = await dumpAuthUsers();
   counts['auth_users (accounts, no passwords)'] = snapshot.auth_users.length;
 
+  // Best-effort usage stats (DB size + storage bytes per bucket) for the health
+  // dashboard. Absent until the usage_stats migration is applied — never fail a
+  // backup over it.
+  let usage = null;
+  try {
+    const { data, error } = await db.rpc('usage_stats');
+    if (!error && data) usage = data;
+  } catch {
+    /* usage_stats() not present yet — ignore */
+  }
+
   const now = new Date();
   const day = now.toISOString().slice(0, 10); // YYYY-MM-DD
   const min = now.toISOString().slice(0, 16).replace(/[:]/g, '-'); // YYYY-MM-DDTHH-MM
@@ -146,6 +157,7 @@ async function main() {
     project_url: URL,
     object: `${BUCKET}/${objectName}`,
     note: 'data-only snapshot; schema is in git (supabase/migrations); passwords + selfies not included',
+    usage,
     row_counts: counts,
   };
 
